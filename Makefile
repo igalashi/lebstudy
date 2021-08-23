@@ -13,7 +13,7 @@ INCLUDES = -Ikol
 #LIBS = kol/kolsocket.o kol/koltcp.o
 LIBS = -Lkol -lkol
 
-PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain
+PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain dtleb
 all: $(PROGS)
 
 kol/libkol.a: kol/kolsocket.h kol/kolsocket.cpp kol/koltcp.h kol/koltcp.cpp
@@ -42,6 +42,9 @@ daqtask: daqtask.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -D TEST_MAIN -o $@ $< $(CXXLIBS) $(LIBS)
 
 dtmain: dtmain.cxx daqtask.cxx dtavant.cxx dtrear.cxx dtfilename.cxx
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
+
+dtleb: dtleb.cxx daqtask.cxx dtarecbe.cxx dteb.cxx dtfilename.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
 hulssm: dtmain.cxx daqtask.cxx dtavant.cxx dtrearhul.cxx dtfilename.cxx

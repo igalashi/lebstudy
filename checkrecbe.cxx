@@ -6,7 +6,29 @@
 #include <iomanip>
 #include <fstream>
 
+//#include <cstdio>
+//#include <csignal>
+
+//#include <unistd.h>
+//#include <time.h>
+#include <arpa/inet.h>
+
+#include "recbe.h"
+
 #define uint32_t unsigned int
+
+
+void ntoh_header(struct recbe_header *host, struct recbe_header *raw)
+{
+	host->type = raw->type;
+	host->id = raw->id;
+	host->sent_num = ntohs(raw->sent_num);
+	host->time = ntohs(raw->time);
+	host->len = ntohs(raw->len);
+	host->trig_count = ntohl(raw->trig_count);
+
+	return;
+}
 
 int decode_tdc(unsigned int *data)
 {
@@ -53,10 +75,9 @@ int reading()
 				<< std::dec << std::endl;
 		}
 	}
-#else
-	
 #endif
 
+#if 0
 	uint32_t data;
 	std::cin.read(reinterpret_cast<char *>(&data), sizeof(uint32_t));
 	std::cout << "HEAD: " << std::hex << data << std::endl;
@@ -92,6 +113,35 @@ int reading()
 		}
 		prev_data = data;
 	}
+#endif
+
+
+	struct recbe_header header, header_raw;
+	unsigned short *body = new unsigned short [4000];
+	char *cheader = reinterpret_cast<char*>(&header_raw);
+	char *cbody = reinterpret_cast<char*>(body);
+
+	while (! std::cin.eof()) {
+		std::cin.read(cheader, sizeof(struct recbe_header));
+		nread += std::cin.gcount();
+		if (std::cin.eof()) break;
+		ntoh_header(&header, &header_raw);
+		nread += std::cin.gcount();
+		
+		std::cin.read(cbody, header.len);
+		//std::vector<int> adc, tdc;
+		//decode_recbe(cbody, header.len, adc, tdc);
+
+		std::cout << "Type 0x:" << std::hex << std::setw(2) << static_cast<unsigned int>(header.type)
+			  << "  id 0x:" << std::hex << std::setw(2) << static_cast<unsigned int>(header.id)
+			  << "  Sent:" << std::dec << std::setw(4) << header.sent_num
+			  << "  Time:" << std::setw(6) << header.time
+			  << "  Len:" << std::setw(6) << header.len
+			  << " Trigger:" << std::setw(4) << header.trig_count
+			  << std::endl;
+
+	}
+
 
 	return 0;
 }
