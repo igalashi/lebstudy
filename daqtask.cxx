@@ -2,8 +2,8 @@
  *
  */
 
-#ifndef __DAQTASK__
-#define __DAQTASK__
+#ifndef INC_DAQ_TASK
+#define INC_DAQ_TASK
 
 #include <iostream>
 #include <thread>
@@ -234,4 +234,4 @@ int main(int argc, char* argv[])
 }
 #endif
 
-#endif //__DAQTASK__
+#endif // INC_DAQ_TASK

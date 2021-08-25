@@ -134,10 +134,10 @@ int reading()
 
 		std::cout << "Type 0x:" << std::hex << std::setw(2) << static_cast<unsigned int>(header.type)
 			  << "  id 0x:" << std::hex << std::setw(2) << static_cast<unsigned int>(header.id)
-			  << "  Sent:" << std::dec << std::setw(4) << header.sent_num
+			  << "  Sent:" << std::dec << std::setw(6) << header.sent_num
 			  << "  Time:" << std::setw(6) << header.time
 			  << "  Len:" << std::setw(6) << header.len
-			  << " Trigger:" << std::setw(4) << header.trig_count
+			  << " Trigger:" << std::setw(6) << header.trig_count
 			  << std::endl;
 
 	}

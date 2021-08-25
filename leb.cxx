@@ -12,10 +12,10 @@ const char* g_snd_endpoint = "inproc://hello";
 //const char* g_rec_endpoint = "ipc://./hello";
 const char* g_rec_endpoint = "inproc://hello";
 
+#include "nodelist.cxx"
 #include "daqtask.cxx"
 #include "dtarecbe.cxx"
 #include "dteb.cxx"
-
 
 
 int main(int argc, char* argv[])
@@ -29,34 +29,55 @@ int main(int argc, char* argv[])
 	int nspill = 0;
 	int quelen = 0;
 
+	char default_file[] = "nodes.txt";
+	char *nodefile = default_file;
+
 	for (int i = 1 ; i < argc ; i++) {
 		std::string sargv(argv[i]);
 		if ((sargv == "-h") && (argc > i)) {
-			strncpy(host, argv[i + 1], 128);
+			strncpy(host, argv[i++], 128);
 		}
 		if ((sargv == "-p")  && (argc > i)) {
-			port = strtol(argv[i + 1], NULL, 0);
+			port = strtol(argv[i++], NULL, 0);
 		}
 		if ((sargv == "-b")  && (argc > i)) {
-			buf_size = strtol(argv[i + 1], NULL, 0);
+			buf_size = strtol(argv[i++], NULL, 0);
 		}
 		if ((sargv == "-q")  && (argc > i)) {
-			quelen = strtol(argv[i + 1], NULL, 0);
+			quelen = strtol(argv[i++], NULL, 0);
 		}
 		if ((sargv == "-n")  && (argc > i)) {
-			nspill = strtol(argv[i + 1], NULL, 0);
+			nspill = strtol(argv[i++], NULL, 0);
 		}
 		if (sargv == "--dummy") {
 			is_dummy = true;
 		}
+
 		#if 0
 		if (sargv == "--help") {
 			dt_printhelp(argv);
 			return 0;
 		}
 		#endif
+
+		if (sargv.front() != '-') {
+			nodefile = argv[i];
+		}
+
 	}
 
+	std::vector<struct nodeprop> nodes;
+	if (nodelist(nodefile, nodes)) {
+		std::cerr << "Node file error : " << nodefile << std::endl;
+		return 1;
+	}
+
+	for (auto &i : nodes) {
+		std::cout << "id: " << i.id
+			<< "  host: "  <<i.host.c_str()
+			<< "  port: "  << i.port
+			<< "  is_dummy: "  << i.is_dummy <<std::endl;
+	}
 
 
 	zmq::context_t context(1);

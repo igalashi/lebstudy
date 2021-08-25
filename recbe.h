@@ -2,8 +2,8 @@
  *
  */
 
-#ifndef __RECBE__
-#define __RECBE__
+#ifndef INC_RECBE
+#define INC_RECBE
 
 #define T_RAW		0x01
 #define T_SUPPRESS	0x02

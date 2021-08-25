@@ -13,7 +13,7 @@ INCLUDES = -Ikol
 #LIBS = kol/kolsocket.o kol/koltcp.o
 LIBS = -Lkol -lkol
 
-PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain dtleb
+PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain leb nodelist
 all: $(PROGS)
 
 kol/libkol.a: kol/kolsocket.h kol/kolsocket.cpp kol/koltcp.h kol/koltcp.cpp
@@ -44,7 +44,7 @@ daqtask: daqtask.cxx
 dtmain: dtmain.cxx daqtask.cxx dtavant.cxx dtrear.cxx dtfilename.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
-dtleb: dtleb.cxx daqtask.cxx dtarecbe.cxx dteb.cxx dtfilename.cxx
+leb: leb.cxx daqtask.cxx dtarecbe.cxx dteb.cxx dtfilename.cxx nodelist.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
 hulssm: dtmain.cxx daqtask.cxx dtavant.cxx dtrearhul.cxx dtfilename.cxx
@@ -56,6 +56,8 @@ drecbe: drecbe.cxx
 checkrecbe: checkrecbe.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
+nodelist: nodelist.cxx
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -D TEST_MAIN -o $@ $< $(CXXLIBS) $(LIBS)
 
 kol/kollib.a:
 	(cd kol; $(MAKE))
@@ -64,4 +66,4 @@ clean:
 	rm -f $(PROGS)
 
 cleandata:
-	rm -f tdc*.dat hul*.dat
+	rm -f tdc*.dat hul*.dat leb*.dat

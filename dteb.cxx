@@ -17,7 +17,7 @@
 #include "daqtask.cxx"
 #include "mstopwatch.cxx"
 
-#if 0
+#if 1
 #include "dtfilename.cxx"
 #else
 const char *dtfilename(const char *name)

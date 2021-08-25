@@ -44,6 +44,7 @@ class DTarecbe : public DAQTask
 public:
 	DTarecbe(int i) : DAQTask(i) {};
 	DTarecbe(int, char *, int, bool);
+	DTarecbe(struct nodeprop &);
 	int get_bufsize() {return m_bufsize;};
 	void set_bufsize(int size) {m_bufsize = size;};
 	int get_quelen() {return m_quelen;};
@@ -63,9 +64,17 @@ private:
 
 DTarecbe::DTarecbe(int i, char *host, int port, bool is_dummy)
 	: DAQTask(i), m_host(host), m_port(port),
-		m_is_dummy(is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen)
+	m_is_dummy(is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen)
 {
 }
+
+DTarecbe::DTarecbe(struct nodeprop &node)
+	: DAQTask(node.id),
+	m_host(const_cast<char *>(node.host.c_str())), m_port(node.port),
+	m_is_dummy(node.is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen)
+{
+}
+
 
 int DTarecbe::st_init(void *context)
 {
@@ -158,8 +167,10 @@ int DTarecbe::st_running(void *context)
 			nread += tcp->gcount();
 		} else {
 			static unsigned int ltrig = 0;
-			header->type = T_RAW;
+			header->type = 0xaa;
 			header->id = m_id;
+			header->sent_num = htons(ltrig & 0xffff);
+			header->time = htons(time(NULL) & 0xffff);
 			header->len = htons(128);
 			header->trig_count = htonl(ltrig++);
 			nread += sizeof(struct recbe_header);
@@ -177,10 +188,14 @@ int DTarecbe::st_running(void *context)
 				std::cerr << "#E tcp read body err. " << e.what() << std::endl;
 				break;
 			}
-			nread = tcp->gcount();
+			nread += tcp->gcount();
 		} else {
-			for (int i = 0 ; i < body_length ; i++) body[i] = i & 0xff;
-			nread = m_bufsize;
+			for (unsigned int i = 0 ;
+				i < (body_length / sizeof(unsigned short)) ; i++) {
+				 body[i] = ntohs(i & 0xffff);
+			}
+			nread += body_length;
+			usleep(1000);
 		}
 
 		zmq::message_t message(
