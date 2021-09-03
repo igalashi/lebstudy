@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
+#include <sys/time.h>
 
 #include "zmq.hpp"
 #include "koltcp.h"
@@ -17,7 +18,7 @@
 #include "daqtask.cxx"
 #include "mstopwatch.cxx"
 
-#if 1
+#if 0
 #include "dtfilename.cxx"
 #else
 const char *dtfilename(const char *name)
@@ -34,20 +35,37 @@ const char *dtfilename(const char *name)
 const char* fnhead = "leb";
 
 
+unsigned long int get_time_ms()
+{
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	unsigned long int val =
+		(now.tv_sec  & 0x000fffffffffffff) * 1000 + (now.tv_usec / 1000);
+
+	return val;
+}
+
+
 class DTeb : public DAQTask
 {
 public:
 	DTeb(int i) : DAQTask(i), m_nspill(1) {};
 	int get_nspill() {return m_nspill;};
 	void set_nspill(int i) {m_nspill = i;};
+	virtual int init(std::vector<struct nodeprop> &);
+	void monitor();
 protected:
 	//virtual void state_machine(void *) override;
 	virtual int st_init(void *) override;
 	virtual int st_idle(void *) override;
 	virtual int st_running(void *) override;
 private:
+	int scan_past(std::vector<struct ebevent> &, int);
+	int send_data(struct ebevent &);
 	int write_data(char*, int);
 	int m_nspill;
+	std::vector<int> m_ids;
+	std::vector<struct ebevent> m_events;
 };
 
 #if 0
@@ -86,6 +104,12 @@ void DTeb::state_machine(void *context)
 }
 #endif
 
+int DTeb::init(std::vector<struct nodeprop> &nodes)
+{
+	for (auto &i : nodes) m_ids.push_back(i.id);
+	return m_ids.size();
+}
+
 int DTeb::st_init(void *context)
 {
 	{
@@ -115,6 +139,14 @@ struct ebbuf {
 	std::deque<int> event_number;
 	int discard;
 	int prev_en;
+};
+
+struct ebevent {
+	unsigned int event_number;
+	std::vector<unsigned int> node;
+	std::vector<std::vector<char>> data; 
+	unsigned long int time_ms;
+	bool is_fullev;
 };
 
 //static int nspill = 1;
@@ -148,6 +180,8 @@ int DTeb::st_running(void *context)
 
 	std::vector<struct ebbuf> ebuf;
 	int nread_flagment = 0;
+
+	//std::vector<struct ebevent> ebevents;
 
 	while (true) {
 
@@ -191,7 +225,19 @@ int DTeb::st_running(void *context)
 		}
 		#endif
 
+		#if 0
+		{
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		std::cout << "### id: " << std::dec << id
+			<< " trig: " << trig
+			<< " size: " << data_size << std::endl;
+		}
+		#endif
+
+
 		bool is_new = true;
+
+		#if 0
 		for (unsigned int i = 0 ; i < ebuf.size() ; i++) {
 			if (id == ebuf[i].id) {
 				is_new = false;
@@ -205,11 +251,77 @@ int DTeb::st_running(void *context)
 			node.discard = 0;
 			ebuf.push_back(node);
 		}
+		#endif
 
+		is_new = true;
+		for (unsigned int i = 0 ; i < m_events.size() ; i++) {
+			if (trig == m_events[i].event_number) {
+				is_new = false;
+				m_events[i].node.push_back(id);
+				std::vector<char> cdata(cbody, cbody + data_size); 
+				m_events[i].data.push_back(cdata);
 
+				if (m_events[i].node.size() >= m_ids.size()) {
+					//std::cout << "x" << std::flush;
+					m_events[i].is_fullev = true;
+
+					//send_data(m_events[i]);
+					//m_events.erase(m_events.begin() + i);
+
+					if (i > 0) std::cout << "X" << std::flush;
+					//先にきた event_number の若い event は不完全でも送る。
+					for (unsigned int j = 0 ; j <= i ; j++) {
+						if (m_events[j].event_number
+							<= m_events[i].event_number) {
+							send_data(m_events[j]);
+						}
+					}
+					//送ったもののバッファの削除、逆順で消していく。
+					for (int j = i ; j >= 0 ; j--) {
+						if (m_events[j].event_number
+							<= m_events[i].event_number) {
+							m_events.erase(m_events.begin() + j);
+						}
+					}
+
+					break;
+				}
+			}
+		}
+		if (is_new) {
+			struct ebevent ev;
+			ev.event_number = trig;
+			ev.node.push_back(id);
+			std::vector<char> cdata(cbody, cbody + data_size); 
+			ev.data.push_back(cdata);
+			ev.time_ms = get_time_ms();
+			ev.is_fullev = false;
+
+			if (m_ids.size() == 1) {
+				send_data(ev);
+			} else {
+				m_events.push_back(ev);
+			}
+		}
 
 
 		write_data(cbody, data_size);
+
+
+		if ((nread_flagment % 1000) == 0) {
+			std::cout << "\r Ev size: " << m_events.size() << "    " << std::flush;
+		}
+
+		#if 0
+		if ((nread_flagment % 1000) == 0) {
+			std::cout << "\r Ev: " << m_events.size() << " : ";
+			for (auto &i : m_events) {
+				std::cout << ", " << i.event_number
+				<< " " << i.node.size();
+			}
+			std::cout << "    " << std::endl << std::flush;
+		}
+		#endif
 
 		#if 0
 		if ((nread_flagment % 1000) == 0) {
@@ -305,4 +417,43 @@ int DTeb::write_data(char *cdata, int data_size)
 
 	return data_size;
 
+}
+
+
+int DTeb::send_data(struct ebevent &event)
+{
+
+	static int lcount = 0;
+	if ((lcount % 100) == 0) std::cout << "." << std::flush;
+
+	return 0;
+}
+
+
+int DTeb::scan_past(std::vector<struct ebevent> &events, int evn)
+{
+	unsigned int en_max = events[evn].event_number;
+	for(int i = evn ; i >= 0 ; i--) {
+		if (events[i].event_number < en_max) {
+			send_data(events[i]);
+			events.erase(events.begin() + i);
+		}
+	
+	}
+	
+	return 0;
+}
+
+
+void DTeb::monitor()
+{
+
+	std::cout << "\r Ev Buf: " << m_events.size() << " : " << std::endl;
+	for (auto &i : m_events) {
+		std::cout << ", " << i.event_number
+		<< " " << i.node.size();
+	}
+	std::cout << std::endl;
+
+	return;
 }

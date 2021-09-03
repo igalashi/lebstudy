@@ -39,12 +39,12 @@ void buf_free(void *buf, void *hint)
 
 
 
-class DTarecbe : public DAQTask
+class DTArecbe : public DAQTask
 {
 public:
-	DTarecbe(int i) : DAQTask(i) {};
-	DTarecbe(int, char *, int, bool);
-	DTarecbe(struct nodeprop &);
+	DTArecbe(int i) : DAQTask(i) {};
+	DTArecbe(int, char *, int, bool);
+	DTArecbe(struct nodeprop &);
 	int get_bufsize() {return m_bufsize;};
 	void set_bufsize(int size) {m_bufsize = size;};
 	int get_quelen() {return m_quelen;};
@@ -60,23 +60,26 @@ private:
 	bool m_is_dummy;
 	int m_bufsize;
 	int m_quelen;
+	int m_trig_num;
 };
 
-DTarecbe::DTarecbe(int i, char *host, int port, bool is_dummy)
+DTArecbe::DTArecbe(int i, char *host, int port, bool is_dummy)
 	: DAQTask(i), m_host(host), m_port(port),
-	m_is_dummy(is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen)
+	m_is_dummy(is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen),
+	m_trig_num(0)
 {
 }
 
-DTarecbe::DTarecbe(struct nodeprop &node)
+DTArecbe::DTArecbe(struct nodeprop &node)
 	: DAQTask(node.id),
 	m_host(const_cast<char *>(node.host.c_str())), m_port(node.port),
-	m_is_dummy(node.is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen)
+	m_is_dummy(node.is_dummy), m_bufsize(default_bufsize), m_quelen(default_quelen),
+	m_trig_num(0)
 {
 }
 
 
-int DTarecbe::st_init(void *context)
+int DTArecbe::st_init(void *context)
 {
 	{
 		std::lock_guard<std::mutex> lock(*c_dtmtx);
@@ -101,7 +104,7 @@ int DTarecbe::st_init(void *context)
 	return 0;
 }
 
-int DTarecbe::st_idle(void *context)
+int DTArecbe::st_idle(void *context)
 {
 	#if 0
 	{
@@ -114,7 +117,7 @@ int DTarecbe::st_idle(void *context)
 	return 0;
 }
 
-int DTarecbe::st_running(void *context)
+int DTArecbe::st_running(void *context)
 {
 	{
 		std::lock_guard<std::mutex> lock(*c_dtmtx);
@@ -166,13 +169,13 @@ int DTarecbe::st_running(void *context)
 			}
 			nread += tcp->gcount();
 		} else {
-			static unsigned int ltrig = 0;
+			//static unsigned int m_trig_num = 0;
 			header->type = 0xaa;
 			header->id = m_id;
-			header->sent_num = htons(ltrig & 0xffff);
+			header->sent_num = htons(m_trig_num & 0xffff);
 			header->time = htons(time(NULL) & 0xffff);
 			header->len = htons(128);
-			header->trig_count = htonl(ltrig++);
+			header->trig_count = htonl(m_trig_num++);
 			nread += sizeof(struct recbe_header);
 		}
 
@@ -195,7 +198,7 @@ int DTarecbe::st_running(void *context)
 				 body[i] = ntohs(i & 0xffff);
 			}
 			nread += body_length;
-			usleep(1000);
+			usleep(100);
 		}
 
 		zmq::message_t message(
@@ -211,7 +214,7 @@ int DTarecbe::st_running(void *context)
 			return -1;
 		}
 	
-		#if 1
+		#if 0
 		if ((segnum % 1000) == 0) {
 			std::lock_guard<std::mutex> lock(*c_dtmtx);
 			std::cout << "\rLSQue: "
