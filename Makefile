@@ -13,12 +13,12 @@ INCLUDES = -Ikol
 #LIBS = kol/kolsocket.o kol/koltcp.o
 LIBS = -Lkol -lkol
 
-PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain leb nodelist
+PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain \
+	leb nodelist triggen trigrecv
 all: $(PROGS)
 
 kol/libkol.a: kol/kolsocket.h kol/kolsocket.cpp kol/koltcp.h kol/koltcp.cpp
 	(cd kol; $(MAKE))
-
 
 fe: fe.cxx zportname.cxx kol/libkol.a
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
@@ -51,6 +51,12 @@ hulssm: dtmain.cxx daqtask.cxx dtavant.cxx dtrearhul.cxx dtfilename.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -D HUL -o $@ $< $(CXXLIBS) $(LIBS)
 
 drecbe: drecbe.cxx
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
+
+triggen: triggen.cxx
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
+
+trigrecv: trigrecv.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
 checkrecbe: checkrecbe.cxx

@@ -62,9 +62,9 @@ protected:
 private:
 	int scan_past(std::vector<struct ebevent> &, int);
 	int send_data(struct ebevent &);
-	int write_data(char*, int);
+	int write_data(struct ebevent &event);
 	int m_nspill;
-	std::vector<int> m_ids;
+	std::vector<unsigned int> m_nodes;
 	std::vector<struct ebevent> m_events;
 };
 
@@ -106,8 +106,8 @@ void DTeb::state_machine(void *context)
 
 int DTeb::init(std::vector<struct nodeprop> &nodes)
 {
-	for (auto &i : nodes) m_ids.push_back(i.id);
-	return m_ids.size();
+	for (auto &i : nodes) m_nodes.push_back(i.id);
+	return m_nodes.size();
 }
 
 int DTeb::st_init(void *context)
@@ -182,6 +182,7 @@ int DTeb::st_running(void *context)
 	int nread_flagment = 0;
 
 	//std::vector<struct ebevent> ebevents;
+	std::vector<unsigned int> trigv(m_nodes.size());
 
 	while (true) {
 
@@ -253,6 +254,7 @@ int DTeb::st_running(void *context)
 		}
 		#endif
 
+
 		is_new = true;
 		for (unsigned int i = 0 ; i < m_events.size() ; i++) {
 			if (trig == m_events[i].event_number) {
@@ -261,14 +263,14 @@ int DTeb::st_running(void *context)
 				std::vector<char> cdata(cbody, cbody + data_size); 
 				m_events[i].data.push_back(cdata);
 
-				if (m_events[i].node.size() >= m_ids.size()) {
-					//std::cout << "x" << std::flush;
+				if (m_events[i].node.size() >= m_nodes.size()) {
 					m_events[i].is_fullev = true;
 
 					//send_data(m_events[i]);
 					//m_events.erase(m_events.begin() + i);
 
-					if (i > 0) std::cout << "X" << std::flush;
+					//if (i > 0) std::cout << "X" << std::flush;
+
 					//先にきた event_number の若い event は不完全でも送る。
 					for (unsigned int j = 0 ; j <= i ; j++) {
 						if (m_events[j].event_number
@@ -297,7 +299,7 @@ int DTeb::st_running(void *context)
 			ev.time_ms = get_time_ms();
 			ev.is_fullev = false;
 
-			if (m_ids.size() == 1) {
+			if (m_nodes.size() == 1) {
 				send_data(ev);
 			} else {
 				m_events.push_back(ev);
@@ -305,12 +307,21 @@ int DTeb::st_running(void *context)
 		}
 
 
-		write_data(cbody, data_size);
+		auto it = std::find(m_nodes.begin(), m_nodes.end(), id);
+		int index = std::distance(m_nodes.begin(), it);
+		trigv[index] = trig;
 
-
-		if ((nread_flagment % 1000) == 0) {
-			std::cout << "\r Ev size: " << m_events.size() << "    " << std::flush;
+		if ((nread_flagment % 100) == 0) {
+			std::cout << "\r\e[16C Evb: " << m_events.size();
+			for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
+				std::cout << " id:" << m_nodes[i]
+				<< " T:" << trigv[i] << "    ";
+			}
+			std::cout << std::flush;
 		}
+		//std::cout << "\r Ev depth: " << m_events.size()
+		//	<< "  id: " << id
+		//	<< "  Trig: " << trig << std::endl;
 
 		#if 0
 		if ((nread_flagment % 1000) == 0) {
@@ -346,14 +357,11 @@ int DTeb::st_running(void *context)
 
 }
 
-int DTeb::write_data(char *cdata, int data_size)
+//int DTeb::write_data(char *cdata, int data_size)
+int DTeb::write_data(struct ebevent &event)
 {
-	unsigned int *data = reinterpret_cast<unsigned int *>(cdata);
-
-	static int spillcount = 0;
 	static int wcount = 0;
 	static mStopWatch sw;
-
 
 	static std::ofstream ofs;
 
@@ -365,58 +373,46 @@ int DTeb::write_data(char *cdata, int data_size)
 		sw.start();
 	}
 
-	while (data_size > 0) {
-		bool is_spill_end = false;
-		for (unsigned int i = 0 ; i < (data_size / sizeof(unsigned int)) ; i++) {
-			if (data[i] == 0xffff5555) {
-				time_t now = time(NULL);
-				ofs.write(reinterpret_cast<char *>(data),
-					sizeof(unsigned int) * (i + 1));
-				ofs.write(reinterpret_cast<char *>(&now), sizeof(time_t));
-				data = &(data[i + 1]);
-				data_size = data_size - ((i + 1) * sizeof(unsigned int));
-				spillcount++;
-				wcount += sizeof(unsigned int) * (i + 1) + sizeof(time_t);
 
-				if ((spillcount % m_nspill) == 0) {
-					char wfname[128];
-					ofs.close();
-
-					int elapse = sw.elapse();
-					sw.start();
-					double wspeed = static_cast<double>(wcount)
-						/ 1024 / 1024
-						* 1000 / static_cast<double>(elapse);
-					std::cout << wfname << " "
-						<< wcount << " B " << elapse << " ms "
-						<< wspeed << " MiB/s"  << std::endl;
-
-					wcount = 0;
-					strncpy(wfname, dtfilename(fnhead), 128);
-					ofs.open(wfname, std::ios::out);
-				}
-				is_spill_end = true;
-				#if 0
-				{
-				std::lock_guard<std::mutex> lock(*c_dtmtx);
-				std::cout << "# left data : " << data_size << std::endl;
-				}
-				#endif
-				if (data_size > 0) {
-					ofs.write(cdata, data_size);
-					wcount += data_size;
-				}
+	for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
+		bool is_match = false;
+		for (unsigned int j = 0 ; j < event.data.size() ; j++) {
+			if (event.node[j] == m_nodes[i]) {
+				ofs.write(event.data[j].data(), event.data[j].size());
+				wcount += event.data[j].size();
+				is_match = true;
 			}
 		}
-		if (! is_spill_end) {
-			ofs.write(reinterpret_cast<char *>(data), data_size);
-			wcount += data_size;
-			break;
+		if (! is_match) {
+			std::lock_guard<std::mutex> lock(*c_dtmtx);
+			std::cout << std::endl << "#W No event flagments : "
+				<< m_nodes[i] << " En : " << event.event_number
+				<< "  " << std::endl;
 		}
 	}
 
-	return data_size;
+	static unsigned int ebcount = 0;
+	if ((ebcount % 100) == 0) {
+		int elapse = sw.elapse();
+		if (elapse >= 10000) {
+			sw.start();
+			double wspeed = static_cast<double>(wcount)
+				/ 1024 / 1024
+				* 1000 / static_cast<double>(elapse);
+			double freq = ebcount * 1000 / static_cast<double>(elapse);
 
+			std::cout << "# Freq::" << freq << " Throughput: "
+			<< wcount << " B " << elapse << " ms "
+			<< wspeed << " MiB/s"  << std::endl;
+
+			wcount = 0;
+			ebcount = 0;
+		}
+	}
+	
+	ebcount++;
+
+	return 0;
 }
 
 
@@ -424,7 +420,12 @@ int DTeb::send_data(struct ebevent &event)
 {
 
 	static int lcount = 0;
-	if ((lcount % 100) == 0) std::cout << "." << std::flush;
+	if ((lcount % 10) == 0) {
+		std::cout << "\r Sent : " << lcount << "  " << std::flush;
+	}
+	lcount++;
+
+	write_data(event);
 
 	return 0;
 }
