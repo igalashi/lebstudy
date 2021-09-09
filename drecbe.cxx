@@ -67,7 +67,7 @@ int get_trig()
 		}
 		#else
 		if ((rand() % 100000) < 10) {
-			retval = -1;
+			retval = -1 * retval;
 		}
 		#endif
 	}
@@ -158,14 +158,15 @@ int send_data(int id, int port)
 							#endif
 
 						} else {
-							struct recbe_header *header;
-							header = reinterpret_cast
-								<struct recbe_header *>(buf);
+							//struct recbe_header *header;
+							//header = reinterpret_cast
+							//	<struct recbe_header *>(buf);
 							//header->sent_num
 							//header->time
 							//header->trig_count
 							std::cout << "#M lost Trig: "
-								<< ntohl(header->trig_count)
+								//<< ntohl(header->trig_count)
+								<< (-1 * trig_num)
 								<< std::endl;
 						}
 					} else {
