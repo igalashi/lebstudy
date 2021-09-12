@@ -13,6 +13,8 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 
+#include "zmq.hpp"
+
 #include "koltcp.h"
 #include "recbe.h"
 
@@ -53,11 +55,20 @@ int set_signal()
         return 0;
 }
 
-int get_trig()
+int get_trig(zmq::socket_t &subsocket)
 {
 	static int trig_num = 0;
 	//struct timeval now;
-	int retval = trig_num++;
+	int retval;
+
+	if (g_ext_trig) {
+		zmq::message_t msg;
+		subsocket.recv(&msg);
+		retval = *(reinterpret_cast<int *>(msg.data()));
+	} else {
+		retval = trig_num++;
+		usleep(static_cast<int>(1000000.0 / g_freq));
+	}
 
 	if (g_lose_trig) {
 		#if 0
@@ -71,8 +82,6 @@ int get_trig()
 		}
 		#endif
 	}
-
-	usleep(static_cast<int>(1000000.0 / g_freq));
 
 	return retval;
 }
@@ -116,13 +125,16 @@ int gen_dummy(int id, int trig_num, char *buf, int buf_size)
 int send_data(int id, int port)
 {
 
+	const char *zport = "tcp://localhost:8888";
+	zmq::context_t context(1);
+	zmq::socket_t subsocket(context, ZMQ_SUB);
+	subsocket.connect(zport);
+	subsocket.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+
 	try {
 		kol::SocketLibrary socklib;
 
 		char *buf = new char[buf_size];
-
-		//int data_size = gen_dummy(buf, id, buf_size);
-
 		g_nsent = 0;
 		kol::TcpServer server(port);
 		while(true) {
@@ -131,7 +143,7 @@ int send_data(int id, int port)
 			while (true) {
 				try {
 					if (sock.good()) {
-						int trig_num = get_trig();
+						int trig_num = get_trig(subsocket);
 						if (trig_num >= 0) {
 							int data_size = gen_dummy(
 								id, trig_num, buf, buf_size);
@@ -139,6 +151,7 @@ int send_data(int id, int port)
 							sock.write(buf, data_size);
 
 							if ((g_nsent % 100) == 0) {
+								#if 0
 								static int count = 0;
 								std::cout << "\r"
 								<< rotbar[count++ % 4]
@@ -146,6 +159,8 @@ int send_data(int id, int port)
 								//std::cout << "\r"
 								//<< scanner[count++ % 8]
 								//<< std::flush;
+								#endif
+								std::cout << "\r" << trig_num << "  ";
 							}
 
 							#if 0
@@ -224,7 +239,10 @@ int main(int argc, char *argv[])
 			g_ext_trig = true;
 		}
 	}
-	std::cout << "ID: " << id << "  Port: " << port << std::endl;
+	std::cout << "ID: " << id << "  Port: " << port;
+	if (g_lose_trig) std::cout << ", Trigger Drop ";
+	if (g_ext_trig) std::cout << ", External Trigger";
+	std::cout << std::endl;
 
 
 	set_signal();
