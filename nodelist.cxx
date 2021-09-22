@@ -18,6 +18,12 @@ struct nodeprop {
 	bool is_dummy;
 };
 
+struct rbcp_com {
+	std::string host;
+	unsigned int address;
+	std::vector<char> data;
+};
+
 bool isNumber(const std::string &s)
 {
 	bool val;
@@ -30,7 +36,18 @@ bool isNumber(const std::string &s)
 	}
 
 	return val;
-	
+}
+
+int process_node(std::vector<struct nodeprop> &nodes)
+{
+
+	return 0;
+}
+
+int process_rbcp(std::vector<struct rbcp_com> &com)
+{
+
+	return 0;
 }
 
 int nodelist(char *filename, std::vector<struct nodeprop> &nodes)

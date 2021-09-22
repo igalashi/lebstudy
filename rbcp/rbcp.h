@@ -8,8 +8,8 @@
 *						*
 *************************************************/
 
-#ifndef _RBCP_H
-#define _RBCP_H
+#ifndef RBCP_HEADER
+#define RBCP_HEADER
 
 struct bcp_header{
 	unsigned char type;
@@ -30,5 +30,21 @@ struct rbcp_header {
 #define RBCP_VER 0xFF
 #define RBCP_CMD_WR 0x80
 #define RBCP_CMD_RD 0xC0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int rbcp_open(char *, int);
+int rbcp_send(int, char *, int);
+int rbcp_receive(int, char *);
+int rbcp_close(int);
+int rbcp_read(int, char *, unsigned int, int);
+int rbcp_write(int, char *, unsigned int, int);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 #endif
