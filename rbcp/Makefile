@@ -20,7 +20,7 @@ rbcp: rbcp.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -DTEST_MAIN \
 		-o $@ $< $(LIBS)
 		
-rbcpserver: rbcp.cxx
+rbcpserver: rbcpserver.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -DTEST_SERVER \
 		-o $@ $< $(LIBS)
 clean:

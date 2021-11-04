@@ -42,6 +42,26 @@ struct rbcp_header {
 #define RBCP_CMD_WR 0x80
 #define RBCP_CMD_RD 0xC0
 
+struct ebcp_header{
+        unsigned char type;
+        unsigned char command;
+        unsigned char id;
+        unsigned char length;
+        unsigned int address;
+		unsigned int destination;
+};
+
+struct erbcp_header {
+        unsigned char type;
+        unsigned char command;
+        unsigned char id;
+        unsigned char length;
+        unsigned int address;
+		unsigned int destination;
+};
+
+#define RBCP_TYPE_ERBCP 0xf1
+
 
 class RBCP
 {
@@ -57,15 +77,13 @@ public:
 	int write(char *, unsigned int, int);
 	void set_timeout(struct timeval *);
 	void get_timeout(struct timeval *);
-	int server(int);
-	int recvres(char *);
 protected:
-private:
 	struct sockaddr_in m_destsockaddr;
 	int m_sock = 0;
 	struct timeval m_timeout = {3, 0};
 	int m_sequence = 0;
 	bool m_is_open = false;
+private:
 };
 
 //static struct sockaddr_in destsockaddr;
@@ -74,13 +92,13 @@ private:
 RBCP::RBCP() : m_sock(0), m_sequence(0)
 {
 	return;
-};
+}
 
 RBCP::RBCP(char *hostname, int port) : m_sock(0), m_sequence(0)
 {
 	RBCP::open(hostname, port);
 	return;
-};
+}
 
 RBCP::~RBCP()
 {
@@ -89,7 +107,7 @@ RBCP::~RBCP()
 		m_is_open = false;
 	}
 	return;
-};
+}
 
 void RBCP::set_timeout(struct timeval *time)
 {
@@ -182,7 +200,9 @@ int RBCP::receive(char *buf)
 		reinterpret_cast<struct sockaddr *>(&m_destsockaddr), &len);
 
 	if (status < 0) {
+		#if 0
 		perror("RBCP::receive recvfrom (Timeout ?)");
+		#endif
 		return -1;
 	}
 
@@ -207,9 +227,10 @@ int RBCP::read(char *buf, unsigned int addr, int len)
 
 	status = RBCP::send((char *)&bcp, sizeof(bcp));
 	if (status < 0) printf("RBCP::read udp_send: error\n");
-	//fprintf(stderr, "#D send\n");
 	rlen = RBCP::receive(buf);
-	//fprintf(stderr, "#D receive %d\n", rlen);
+
+	if (rlen <= 0) return rlen;
+
 	data = buf + sizeof(struct rbcp_header);	
 
 #ifdef DEBUG
@@ -296,89 +317,6 @@ int RBCP::write(char *data, unsigned int addr, int len)
 }
 
 
-int RBCP::server(int port)
-{
-
-	if ((m_sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("RBCP::server socket creation failed");
-		return -1;
-	}
-
-	struct sockaddr_in serveraddr;
-	memset(&serveraddr, 0, sizeof(serveraddr));
-	serveraddr.sin_family = AF_INET;
-	serveraddr.sin_addr.s_addr = INADDR_ANY;
-	serveraddr.sin_port = htons(port);
-
-	//setsockopt(m_sock, SOL_SOCKET, SO_RCVTIMEO,
-	//	(char *)&m_timeout, sizeof(struct timeval));
-
-	if (bind(m_sock, (const struct sockaddr *)&serveraddr,
-		sizeof(serveraddr)) < 0) {
-		perror("RBCP::server bind faild");
-		return -1;
-	}
-
-	m_is_open = true;
-	return m_sock;
-}
-
-
-int RBCP::recvres(char *buf)
-{
-	struct bcp_header *bcph;
-	struct rbcp_header *rbcph;
-	static char rbuf[512];
-	
-	bcph = reinterpret_cast<struct bcp_header *>(buf);
-	rbcph = reinterpret_cast<struct rbcp_header *>(rbuf);
-	char *rdata = rbuf + sizeof(struct rbcp_header); 
-	char *data = buf + sizeof(struct bcp_header); 
-
-	unsigned int addr;
-	int com, len, id;
-
-	char *mem = new char[1024];
-
-	while (true) {
-		int ndata = 0;
-		while ((ndata = RBCP::receive(buf)) > 0) {
-			std::cout << "# packet length: " << ndata << ", ";
-			for (int i = 0 ; i < ndata ; i++) {
-				std::cout << std::hex << std::setw(2) <<
-					(static_cast<unsigned int>(buf[i]) & 0xff) << " ";
-			}
-			std::cout << std::endl;
-			addr = ntohl(bcph->address);
-			com = static_cast<int>(bcph->command);
-			len = static_cast<int>(bcph->length);
-			id = static_cast<int>(bcph->id);
-			rbcph->address = bcph->address;
-			rbcph->command = bcph->command;
-			rbcph->length = bcph->length;
-			rbcph->id = bcph->id;
-			int rlen = sizeof(struct rbcp_header) + len;
-
-			std::cout << "# com:" << com << " id:" << id
-				<< " addr:" << addr << " len:" << len << std::endl;
-			
-			if (com == RBCP_CMD_RD) {
-				for (int i = 0 ; i < len ; i++) rdata[i] = mem[i + addr];
-			}
-			if (com == RBCP_CMD_WR) {
-				for (int i = 0 ; i < len ; i++) rdata[i] = mem[i + addr] = data[i];
-			}
-
-			RBCP::send(rbuf, rlen);
-
-		}
-		std::cout << "TO ";
-	}
-
-	return 0;
-}
-
-
 #ifdef TEST_MAIN
 
 static const char *default_host = "192.168.10.16";
@@ -417,31 +355,63 @@ int main(int argc, char* argv[])
 	wdata = -1;
 	rlen = 0;
 	for (i = 1 ; i < argc ; i++) {
-		if (sscanf(argv[i], "--host=%s", hostname) == 1) ;
-		if (sscanf(argv[i], "--port=%d", &port) == 1) ;
+		if (sscanf(argv[i], "--host=%s", hostname) == 1);
+		if (sscanf(argv[i], "--port=%d", &port) == 1);
 		if (sscanf(argv[i], "--read=%x:%x", &raddress, &rlen) == 1);
 		if (sscanf(argv[i], "--write=%x:%x", &waddress, &wdata) == 1);
 		if (strncmp(argv[i], "--seq1", 6) == 0) seq1 = 1;
 	}
 
-	printf("host: %s\n", hostname);
+	printf("host: %s, port: %d\n", hostname, port);
 
 	RBCP rbcp;
 	rbcp.open(hostname, port);
 
-	
 	if (rlen > 0) {
 		printf("read: 0x%x : %d\n", raddress, rlen);
 		rbcp.read(buf, raddress, rlen);
+
+		struct rbcp_header *rh;
+		rh = (struct rbcp_header *)buf;
+		int i;
+		printf("type: 0x%x, command: 0x%x, id: 0x%x, length: %d, address: %d",
+			rh->type & 0xff, rh->command& 0xff,
+			rh->id & 0xff, rh->length & 0xff,
+			ntohl(rh->address & 0xffffffff));
+		
+		char *data = buf + sizeof(struct rbcp_header);
+		unsigned int addr = ntohl(rh->address & 0xffffffff);
+		for (i = 0 ; i < (int)(rlen - sizeof(struct rbcp_header)) ; i++) {
+			if ((i % 8) == 0) printf("\n%04x: ", addr + i);
+			printf("%02x ", data[i] & 0xff);
+		}
+		printf("\n");
 	}
+
 	if (wdata >= 0) {
 		printf("write: 0x%x : %x\n", waddress, wdata);
 		buf[0] = wdata & 0xff;
 		buf[1] = 0;
 		status = rbcp.write(buf, waddress, 1);
 		if (status <= 0) printf("Write Error %d\n", status);
-	}
 
+		#if 0
+		struct rbcp_header *rh;
+		rh = (struct rbcp_header *)rbuf;
+		if (rlen > 0) {
+		int i;
+		printf("type: 0x%x, command: 0x%x, id: 0x%x, length: %d, address: %d",
+			rh->type & 0xff, rh->command& 0xff,
+			rh->id & 0xff, rh->length & 0xff,
+			ntohl(rh->address & 0xffffffff));
+
+		for (i = 0 ; i < (int)(rlen - sizeof(struct rbcp_header)) ; i++) {
+			if ((i % 8) == 0) printf("\n%04x: ", addr + i);
+			printf("%02x ", data[i] & 0xff);
+		}
+		printf("\n");
+		#endif
+	}
 
 	if (seq1 == 1) {
 		int j;
@@ -458,34 +428,4 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-#endif
-
-
-#ifdef TEST_SERVER
-int main(int argc, char* argv[])
-{
-	static char buf[1024];
-	int port = 8888;
-	RBCP  rbcp;
-	rbcp.server(port);
-
-	rbcp.recvres(buf);
-
-	#if 0
-	while (true) {
-		int len = 0;
-		while ((len = rbcp.receive(buf)) > 0) {
-			std::cout << "# len: " << len << " ";
-			for (int i = 0 ; i < len ; i++) {
-				std::cout << std::hex << std::setw(2) <<
-					(static_cast<unsigned int>(buf[i]) & 0xff) << " ";
-			}
-			std::cout << std::endl;
-		}
-		std::cout << "TO ";
-	}
-	#endif
-
-	return 0;
-}
 #endif
