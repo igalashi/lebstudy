@@ -1,19 +1,22 @@
 #
 #
-#node 11 localhost 8801
-#node 12 localhost 8802
-#node 13 localhost 8803
 11 localhost 8801
 12 localhost 8802
 13 localhost 8803
-#14 localhost 8804 dummy
+14 localhost 8804 dummy
 #15 localhost 8805  hello world.  
 #16 localhost 8806 dummy
 #17 8807
 #localhost 18 8808
 
-#subnet 192.168.10.
-#X 21 22 23 24
-#rbcp 21 00 01 02 03 04
-#rbcp 192.168.10.21 00 01 02 00
+subnet 192.168.10.
+X 21 22 23 24
+
+rbcp 8188 00 01 02 03 04
+
+rbcp host 192.168.11.111
+rbcp port 128
+rbcp 10 11 22 33
+rbcp 00 01 02 00
+
 #rbcp X 00 01 02 00

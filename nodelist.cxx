@@ -4,6 +4,7 @@
  */
 
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -20,6 +21,7 @@ struct nodeprop {
 
 struct rbcp_com {
 	std::string host;
+	unsigned int port;
 	unsigned int address;
 	std::vector<char> data;
 };
@@ -38,19 +40,77 @@ bool isNumber(const std::string &s)
 	return val;
 }
 
+bool isHexNumber(const std::string &s)
+{
+	bool val;
+	if (s.find_first_not_of("0123456789abcdefABCDEF")
+		== std::string::npos) {
+		val = true;
+	} else {
+		val = false;
+	}
+
+	return val;
+}
+
+
 int process_node(std::vector<struct nodeprop> &nodes)
 {
 
 	return 0;
 }
 
-int process_rbcp(std::vector<struct rbcp_com> &com)
+int process_rbcp(std::vector <std::string> &words, std::vector<struct rbcp_com> &com)
 {
+	static std::string host("bc");
+	static unsigned int port(4660);
+
+	#if 0
+	std::cout << "#DR ";
+	for (auto &i : words) std::cout << " " << i;
+	std::cout << std::endl;
+	#endif
+
+	if ((words[0] == "rbcp") || (words[0] == "RBCP")) {
+		if ((words[1] == "host") && (words.size() > 2)) {
+			host = words[2];
+		}
+		if ((words[1] == "port") && (words.size() > 2)) {
+			port = std::stoi(words[2], nullptr, 10);
+		}
+		if (words.size() > 3) {
+			if (isHexNumber(words[1]) && isHexNumber(words[2])) {
+				struct rbcp_com lcom;
+					lcom.host = host;
+					lcom.port = port;
+
+					lcom.address = std::stoi(words[1], nullptr, 16);
+					for (unsigned int i = 2 ; i < words.size() ; i++) {
+						unsigned int val = std::stoi(words[i], nullptr, 16);
+						char cval = static_cast<char>(val & 0xff);
+						lcom.data.push_back(cval);
+					}
+					com.push_back(lcom);
+			} else {
+				std::cerr << "wrong line :";
+				for (unsigned int i = 0 ; i < words.size() ; i++) {
+					std::cerr << " " << words[i];
+				}
+				std::cerr << std::endl;
+			}
+		}
+	
+
+	} else {
+		return -1;
+	}
 
 	return 0;
 }
 
-int nodelist(char *filename, std::vector<struct nodeprop> &nodes)
+int nodelist(char *filename,
+	std::vector<struct nodeprop> &nodes,
+	std::vector<struct rbcp_com> &rcoms)
 {
 	std::ifstream ifs(filename);
 
@@ -81,7 +141,17 @@ int nodelist(char *filename, std::vector<struct nodeprop> &nodes)
 			offset = pos + 1;
 		}
 
+		if (words.size() < 1) continue;
+
+		#if 0
+		std::cout << "#D " << words.size() << " ; " << line << std::endl;
+		#endif
+
 		if (words[0].front() == '#') continue;
+		if ((words[0] == "rbcp") || (words[0] == "RBCP")) {
+			process_rbcp(words, rcoms);
+			continue;
+		}
 		if (words.size() >= 3) {
 			struct nodeprop nprop;
 			nprop.is_dummy = false;
@@ -138,13 +208,27 @@ int main(int argc, char* argv[])
 {
 
 	std::vector<struct nodeprop> nodes;
-	nodelist(argv[1], nodes);
+	std::vector<struct rbcp_com> rcommands;
+	nodelist(argv[1], nodes, rcommands);
 
 	for (auto i : nodes) {
-		std::cout << "id: " << i.id
+		std::cout << "id: " << std::dec << i.id
 			<< "  host: "  <<i.host
 			<< "  port: "  << i.port
 			<< "  is_dummy: "  << i.is_dummy <<std::endl;
+	}
+
+	for (auto i : rcommands) {
+		std::cout << "host: " << i.host
+			<< " port: " << std::dec << i.port
+			<< " address: 0x" << std::hex << std::setfill('0') << std::setw(4)
+			<< i.address
+			<< " :";
+		for (auto j : i.data) {
+			std::cout << " " << std::hex << std::setfill('0') << std::setw(2)
+				<< (static_cast<unsigned int>(j) & 0xff);
+		}
+		std::cout << std::endl;
 	}
 
 	return 0;

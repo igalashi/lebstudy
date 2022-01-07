@@ -152,6 +152,9 @@ int main(int argc, char* argv[])
 {
 
 	int port = 8888;
+	for (int i = 0 ; i < argc ; i++) {
+		if (sscanf(argv[i], "--port=%d", &port) == 1);
+	}
 
 	std::cout << "Port: " << port << std::endl;
 

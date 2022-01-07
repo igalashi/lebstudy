@@ -67,7 +67,8 @@ int main(int argc, char* argv[])
 	}
 
 	std::vector<struct nodeprop> nodes;
-	if (nodelist(nodefile, nodes)) {
+	std::vector<struct rbcp_com> coms;
+	if (nodelist(nodefile, nodes, coms)) {
 		std::cerr << "Node file error : " << nodefile << std::endl;
 		return 1;
 	}
@@ -77,6 +78,17 @@ int main(int argc, char* argv[])
 			<< "  host: "  <<i.host.c_str()
 			<< "  port: "  << i.port
 			<< "  is_dummy: "  << i.is_dummy <<std::endl;
+	}
+
+	for (auto &i : coms) {
+		std::cout << "host: " << i.host
+			<< "  port: "  << i.port
+			<< "  addr: "  << i.address
+			<< "  data:";
+		for (auto &j : i.data) {
+			std::cout << " " << j;
+		}
+		std::cout << std::endl;
 	}
 
 
