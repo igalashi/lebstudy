@@ -60,12 +60,16 @@ protected:
 	virtual int st_idle(void *) override;
 	virtual int st_running(void *) override;
 private:
-	int scan_past(std::vector<struct ebevent> &, int);
-	int send_data(struct ebevent &);
-	int write_data(struct ebevent &event);
+	//int scan_past(std::vector<struct ebevent> &, int);
+	int send_data(struct ebevent &, zmq::socket_t &);
+	int write_data(struct ebevent &);
+	int write_data(unsigned char *, int);
+	int pack_data(struct ebevent &, unsigned char * &);
 	int m_nspill;
 	std::vector<unsigned int> m_nodes;
 	std::vector<struct ebevent> m_events;
+
+	std::ofstream m_ofs;
 };
 
 #if 0
@@ -144,7 +148,7 @@ struct ebbuf {
 struct ebevent {
 	unsigned int event_number;
 	std::vector<unsigned int> node;
-	std::vector<std::vector<char>> data; 
+	std::vector<std::vector<unsigned char>> data; 
 	unsigned long int time_ms;
 	bool is_fullev;
 };
@@ -161,21 +165,30 @@ int DTeb::st_running(void *context)
 	zmq::socket_t receiver(
 		*(reinterpret_cast<zmq::context_t *>(context)),
 		ZMQ_PULL);
-
-	//receiver.setsockopt(ZMQ_RCVBUF, 16 * 1024);
-	//receiver.setsockopt(ZMQ_RCVHWM, 1000);
 	#if 0
+	receiver.setsockopt(ZMQ_RCVBUF, 16 * 1024);
+	receiver.setsockopt(ZMQ_RCVHWM, 1000);
 	std::cout << "eb: ZMQ_RCVBUF : " << receiver.getsockopt<int>(ZMQ_RCVBUF) << std::endl;
 	std::cout << "eb: ZMQ_RCVHWM : " << receiver.getsockopt<int>(ZMQ_RCVHWM) << std::endl;
 	#endif
-
 	receiver.bind(g_rec_endpoint);
 
-	zmq::message_t message;
 
-	char wfname[128];
-	strncpy(wfname, dtfilename(fnhead), 128);
-	std::ofstream ofs;
+	zmq::socket_t ebserver(
+		*(reinterpret_cast<zmq::context_t *>(context)),
+		ZMQ_PUSH);
+	#if 0
+	ebserver.setsockopt(ZMQ_SNDHWM, 1000);
+	std::cout << "ebsrv: ZMQ_SNDBUF : " << ebserver.getsockopt<int>(ZMQ_SNDBUF) << std::endl;
+	std::cout << "ebsrv: ZMQ_SNDHWM : " << ebserver.getsockopt<int>(ZMQ_SNDHWM) << std::endl;
+	#endif
+        ebserver.bind(g_ebsrv_endpoint);
+
+	std::cout << "#D dteb inited." << std::endl;
+
+	//char wfname[128];
+	//strncpy(wfname, dtfilename(fnhead), 128);
+	//std::ofstream ofs;
 
 
 	std::vector<struct ebbuf> ebuf;
@@ -185,6 +198,7 @@ int DTeb::st_running(void *context)
 	std::vector<unsigned int> trigv(m_nodes.size());
 
 	while (true) {
+		zmq::message_t message;
 
 		//if (c_state != SM_RUNNING) break;
 		if ((c_state != SM_RUNNING) && (g_avant_depth <= 0)) break;
@@ -203,7 +217,7 @@ int DTeb::st_running(void *context)
 		}
 
 		unsigned int *head = reinterpret_cast<unsigned int *>(message.data());
-		char *cbody =  reinterpret_cast<char *>(head + 2);
+		unsigned char *cbody =  reinterpret_cast<unsigned char *>(head + 2);
 		unsigned int id = head[0] & 0x000000ff;
 		unsigned int trig = head[1] & 0x0fffffff;
 		unsigned int data_size = message.size() -  (2 *sizeof(unsigned int));
@@ -260,7 +274,7 @@ int DTeb::st_running(void *context)
 			if (trig == m_events[i].event_number) {
 				is_new = false;
 				m_events[i].node.push_back(id);
-				std::vector<char> cdata(cbody, cbody + data_size); 
+				std::vector<unsigned char> cdata(cbody, cbody + data_size); 
 				m_events[i].data.push_back(cdata);
 
 				if (m_events[i].node.size() >= m_nodes.size()) {
@@ -275,7 +289,7 @@ int DTeb::st_running(void *context)
 					for (unsigned int j = 0 ; j <= i ; j++) {
 						if (m_events[j].event_number
 							<= m_events[i].event_number) {
-							send_data(m_events[j]);
+							send_data(m_events[j], ebserver);
 						}
 					}
 					//送ったもののバッファの削除、逆順で消していく。
@@ -294,13 +308,13 @@ int DTeb::st_running(void *context)
 			struct ebevent ev;
 			ev.event_number = trig;
 			ev.node.push_back(id);
-			std::vector<char> cdata(cbody, cbody + data_size); 
+			std::vector<unsigned char> cdata(cbody, cbody + data_size); 
 			ev.data.push_back(cdata);
 			ev.time_ms = get_time_ms();
 			ev.is_fullev = false;
 
 			if (m_nodes.size() == 1) {
-				send_data(ev);
+				send_data(ev, ebserver);
 			} else {
 				m_events.push_back(ev);
 			}
@@ -351,24 +365,23 @@ int DTeb::st_running(void *context)
 		nread_flagment++;
 	}
 
-	ofs.close();
+	if (m_ofs.is_open())  m_ofs.close();
 
 	return 0;
 
 }
 
-//int DTeb::write_data(char *cdata, int data_size)
 int DTeb::write_data(struct ebevent &event)
 {
 	static int wcount = 0;
 	static mStopWatch sw;
 
-	static std::ofstream ofs;
+	//static std::ofstream ofs;
 
-	if (! ofs.is_open()) {
+	if (! m_ofs.is_open()) {
 		char wfname[128];
 		strncpy(wfname, dtfilename(fnhead), 128);
-		ofs.open(wfname, std::ios::out);
+		m_ofs.open(wfname, std::ios::out);
 		std::cout << wfname << std::endl;
 		sw.start();
 	}
@@ -378,7 +391,9 @@ int DTeb::write_data(struct ebevent &event)
 		bool is_match = false;
 		for (unsigned int j = 0 ; j < event.data.size() ; j++) {
 			if (event.node[j] == m_nodes[i]) {
-				ofs.write(event.data[j].data(), event.data[j].size());
+				m_ofs.write(
+					reinterpret_cast<char *>(event.data[j].data()),
+					event.data[j].size());
 				wcount += event.data[j].size();
 				is_match = true;
 			}
@@ -415,9 +430,199 @@ int DTeb::write_data(struct ebevent &event)
 	return 0;
 }
 
-
-int DTeb::send_data(struct ebevent &event)
+int DTeb::write_data(unsigned char *cdata, int data_size)
 {
+	static int wcount = 0;
+	static mStopWatch sw;
+
+	if (! m_ofs.is_open()) {
+		char wfname[128];
+		strncpy(wfname, dtfilename(fnhead), 128);
+		m_ofs.open(wfname, std::ios::out);
+		std::cout << wfname << std::endl;
+		sw.start();
+	}
+
+	m_ofs.write(
+		reinterpret_cast<char *>(cdata), data_size);
+	wcount += data_size;
+
+	static unsigned int ebcount = 0;
+	if ((ebcount % 100) == 0) {
+		int elapse = sw.elapse();
+		if (elapse >= 10000) {
+			sw.start();
+			double wspeed = static_cast<double>(wcount)
+				/ 1024 / 1024
+				* 1000 / static_cast<double>(elapse);
+			double freq = ebcount * 1000 / static_cast<double>(elapse);
+
+			std::cout << "# Freq::" << freq << " Throughput: "
+			<< wcount << " B " << elapse << " ms "
+			<< wspeed << " MiB/s"  << std::endl;
+
+			wcount = 0;
+			ebcount = 0;
+		}
+	}
+	ebcount++;
+
+
+	return 0;
+}
+
+struct packed_event {
+	uint32_t magic;
+	uint16_t length;
+	uint16_t id;
+	uint16_t nodes;
+	uint16_t flag;
+};
+
+#define LEB_MAGIC 0xffffffff
+#define LEB_FLAG_COMPLETE  0x0001
+#define LEB_FLAG_INCOMPLETE  0x0000
+
+#if 0
+int DTeb::pack_data(struct ebevent &event, char *cevent)
+{
+	struct packed_event *pevent = reinterpret_cast<struct packed_event *>(cevent);
+	char *data_body = cevent + sizeof(struct packed_event);
+	int wcount = 0;
+	
+	for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
+		bool is_match = false;
+		for (unsigned int j = 0 ; j < event.data.size() ; j++) {
+			if (event.node[j] == m_nodes[i]) {
+				//m_ofs.write(event.data[j].data(), event.data[j].size());
+				memcpy(event.data[j].data(), data_body + wcount, event.data[j].size());
+				data_body += event.data[j].size();
+				wcount += event.data[j].size();
+				is_match = true;
+			}
+		}
+		if (is_match) {
+			event.is_fullev = true;
+		} else {
+			std::lock_guard<std::mutex> lock(*c_dtmtx);
+			std::cout << std::endl << "#W No event flagments : "
+				<< m_nodes[i] << " En : " << event.event_number
+				<< "  " << std::endl;
+			event.is_fullev = false;
+		}
+	}
+
+	pevent->magic = htonl(LEB_MAGIC);
+	pevent->length = htons(wcount);
+	pevent->id = static_cast<uint16_t>(htons(m_id & 0xffff));
+	pevent->nodes = htons(event.data.size());
+	uint16_t fflag = event.is_fullev;
+	fflag = event.is_fullev
+		? fflag | LEB_FLAG_COMPLETE : fflag | LEB_FLAG_INCOMPLETE;
+	pevent->flag = htons(fflag);
+
+	return static_cast<int>(event.is_fullev);
+}
+#endif
+
+
+int DTeb::pack_data(struct ebevent &event, unsigned char * &pbuf)
+{
+	struct packed_event header;
+	unsigned char *cheader = reinterpret_cast<unsigned char *>(&header);
+	int wcount = 0;
+
+	static std::vector<unsigned char> buf;
+	buf.clear();
+	buf.resize(0);
+
+	header.magic = htonl(LEB_MAGIC);
+	header.length = 0;
+	header.id = static_cast<uint16_t>(htons(m_id & 0xffff));
+	header.nodes = htons(event.data.size());
+	header.flag = 0;
+
+	for (unsigned int i = 0 ; i < sizeof(struct packed_event) ; i++) {
+		buf.push_back(cheader[i]);
+	}
+
+	
+	for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
+		bool is_match = false;
+		for (unsigned int j = 0 ; j < event.data.size() ; j++) {
+			if (event.node[j] == m_nodes[i]) {
+				//m_ofs.write(event.data[j].data(), event.data[j].size());
+				//memcpy(event.data[j].data(), data_body + wcount, event.data[j].size());
+				//data_body += event.data[j].size();
+
+				std::copy(
+					event.data[j].begin(), event.data[j].end(),
+					std::back_inserter(buf));
+
+				wcount += event.data[j].size();
+				is_match = true;
+			}
+		}
+		if (is_match) {
+			event.is_fullev = true;
+		} else {
+			std::lock_guard<std::mutex> lock(*c_dtmtx);
+			std::cout << std::endl << "#W No event flagments : "
+				<< m_nodes[i] << " En : " << event.event_number
+				<< "  " << std::endl;
+			event.is_fullev = false;
+		}
+	}
+
+	std::cout << "#D " << buf.size() - sizeof(struct packed_event)
+		<< ", " << wcount << std::endl;;
+
+	pbuf = buf.data();
+	struct packed_event *pevent = reinterpret_cast<struct packed_event *>(pbuf);
+	pevent->length = htons(wcount);
+	//pevent->nodes = htons(event.data.size());
+	uint16_t fflag = event.is_fullev;
+	fflag = event.is_fullev
+		? fflag | LEB_FLAG_COMPLETE : fflag | LEB_FLAG_INCOMPLETE;
+	pevent->flag = htons(fflag);
+
+	return buf.size();
+}
+
+
+int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
+{
+
+	//
+	// data sort pack send?
+	//
+
+	unsigned char *ebdata;
+	int nsize = pack_data(event, ebdata);
+
+	{
+	std::lock_guard<std::mutex> lock(*c_dtmtx);
+	std::cout << "#D " << " datasize: " << nsize << std::endl;
+
+	struct packed_event *pevent = reinterpret_cast<struct packed_event *>(ebdata);
+	std::cout << " magic: " << std::hex << pevent->magic
+		<< " len: " << std::dec << ntohs(pevent->length)
+		<< " id: " << ntohs(pevent->id)
+		<< " nodes: " << ntohs(pevent->nodes)
+		<< " flag: " << ntohs(pevent->flag)
+		<< std::endl;
+
+	std::cout << std::hex;
+	for (int i = 0 ; i < 128 ; i++) {
+		if ((i % 16) == 0) std::cout << std::endl;
+		std::cout << " "
+			<< std::setw(2) << std::setfill('0')
+			<< static_cast<int>(ebdata[i]);
+	}
+	std::cout << std::dec << std::endl;
+	}
+
+
 
 	static int lcount = 0;
 	if ((lcount % 10) == 0) {
@@ -425,18 +630,20 @@ int DTeb::send_data(struct ebevent &event)
 	}
 	lcount++;
 
-	write_data(event);
+	//write_data(event);
+	write_data(ebdata, nsize);
 
 	return 0;
 }
 
 
+#if 0
 int DTeb::scan_past(std::vector<struct ebevent> &events, int evn)
 {
 	unsigned int en_max = events[evn].event_number;
 	for(int i = evn ; i >= 0 ; i--) {
 		if (events[i].event_number < en_max) {
-			send_data(events[i]);
+			send_data(events[i], ebserver);
 			events.erase(events.begin() + i);
 		}
 	
@@ -444,6 +651,7 @@ int DTeb::scan_past(std::vector<struct ebevent> &events, int evn)
 	
 	return 0;
 }
+#endif
 
 
 void DTeb::monitor()

@@ -22,5 +22,8 @@ ex1: ex1.cpp libkol.a
 clean:
 	rm -f *.o *.a
 
-.c.o:
+.cpp.o:
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+.c.o:
+	$(CC) $(CFLAGS) -c $< -o $@

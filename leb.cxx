@@ -11,6 +11,7 @@ const char* g_snd_endpoint = "inproc://hello";
 //const char* g_rec_endpoint = "tcp://*:5558";
 //const char* g_rec_endpoint = "ipc://./hello";
 const char* g_rec_endpoint = "inproc://hello";
+const char* g_ebsrv_endpoint = "tcp://*:5559";
 
 #include "nodelist.cxx"
 #include "daqtask.cxx"
