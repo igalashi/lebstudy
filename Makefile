@@ -14,7 +14,7 @@ INCLUDES = -Ikol
 LIBS = -Lkol -lkol
 
 PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain \
-	leb nodelist triggen trigrecv
+	leb nodelist triggen trigrecv ebreceiver
 all: $(PROGS)
 
 kol/libkol.a: kol/kolsocket.h kol/kolsocket.cpp kol/koltcp.h kol/koltcp.cpp
@@ -57,6 +57,9 @@ triggen: triggen.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
 trigrecv: trigrecv.cxx
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
+
+ebreceiver: ebreceiver.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
 checkrecbe: checkrecbe.cxx

@@ -46,6 +46,16 @@ unsigned long int get_time_ms()
 }
 
 
+std::atomic<int> g_ebs_depth(0);
+void ebs_buf_free(void *buf, void *hint)
+{
+	unsigned char *bufbuf = reinterpret_cast<unsigned char *>(buf);
+	delete bufbuf;
+	g_ebs_depth--;
+}
+
+
+
 class DTeb : public DAQTask
 {
 public:
@@ -182,7 +192,7 @@ int DTeb::st_running(void *context)
 	std::cout << "ebsrv: ZMQ_SNDBUF : " << ebserver.getsockopt<int>(ZMQ_SNDBUF) << std::endl;
 	std::cout << "ebsrv: ZMQ_SNDHWM : " << ebserver.getsockopt<int>(ZMQ_SNDHWM) << std::endl;
 	#endif
-        ebserver.bind(g_ebsrv_endpoint);
+	ebserver.bind(g_ebsrv_endpoint);
 
 	std::cout << "#D dteb inited." << std::endl;
 
@@ -325,6 +335,8 @@ int DTeb::st_running(void *context)
 		int index = std::distance(m_nodes.begin(), it);
 		trigv[index] = trig;
 
+
+		#if 0
 		if ((nread_flagment % 100) == 0) {
 			std::cout << "\r\e[16C Evb: " << m_events.size();
 			for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
@@ -333,9 +345,7 @@ int DTeb::st_running(void *context)
 			}
 			std::cout << std::flush;
 		}
-		//std::cout << "\r Ev depth: " << m_events.size()
-		//	<< "  id: " << id
-		//	<< "  Trig: " << trig << std::endl;
+		#endif
 
 		#if 0
 		if ((nread_flagment % 1000) == 0) {
@@ -416,7 +426,7 @@ int DTeb::write_data(struct ebevent &event)
 				* 1000 / static_cast<double>(elapse);
 			double freq = ebcount * 1000 / static_cast<double>(elapse);
 
-			std::cout << "# Freq::" << freq << " Throughput: "
+			std::cout << "# Freq: " << freq << " Throughput: "
 			<< wcount << " B " << elapse << " ms "
 			<< wspeed << " MiB/s"  << std::endl;
 
@@ -546,15 +556,11 @@ int DTeb::pack_data(struct ebevent &event, unsigned char * &pbuf)
 		buf.push_back(cheader[i]);
 	}
 
-	
+
 	for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
 		bool is_match = false;
 		for (unsigned int j = 0 ; j < event.data.size() ; j++) {
 			if (event.node[j] == m_nodes[i]) {
-				//m_ofs.write(event.data[j].data(), event.data[j].size());
-				//memcpy(event.data[j].data(), data_body + wcount, event.data[j].size());
-				//data_body += event.data[j].size();
-
 				std::copy(
 					event.data[j].begin(), event.data[j].end(),
 					std::back_inserter(buf));
@@ -566,16 +572,21 @@ int DTeb::pack_data(struct ebevent &event, unsigned char * &pbuf)
 		if (is_match) {
 			event.is_fullev = true;
 		} else {
+			#if 0
 			std::lock_guard<std::mutex> lock(*c_dtmtx);
 			std::cout << std::endl << "#W No event flagments : "
 				<< m_nodes[i] << " En : " << event.event_number
 				<< "  " << std::endl;
+			#else
+			//std::lock_guard<std::mutex> lock(*c_dtmtx);
+			//std::cout << "X" << std::flush;
+			#endif
 			event.is_fullev = false;
 		}
 	}
 
-	std::cout << "#D " << buf.size() - sizeof(struct packed_event)
-		<< ", " << wcount << std::endl;;
+	//std::cout << "#D " << buf.size() - sizeof(struct packed_event)
+	//	<< ", " << wcount << std::endl;;
 
 	pbuf = buf.data();
 	struct packed_event *pevent = reinterpret_cast<struct packed_event *>(pbuf);
@@ -592,18 +603,18 @@ int DTeb::pack_data(struct ebevent &event, unsigned char * &pbuf)
 
 int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 {
-
-	//
-	// data sort pack send?
-	//
-
 	unsigned char *ebdata;
 	int nsize = pack_data(event, ebdata);
 
+	#if 0
 	{
 	std::lock_guard<std::mutex> lock(*c_dtmtx);
-	std::cout << "#D " << " datasize: " << nsize << std::endl;
 
+	std::cout << "#D node ids:";
+	for (auto i : event.node) std::cout << " " << i;
+	std::cout << std::endl;
+
+	std::cout << "#D " << " datasize: " << nsize << std::endl;
 	struct packed_event *pevent = reinterpret_cast<struct packed_event *>(ebdata);
 	std::cout << " magic: " << std::hex << pevent->magic
 		<< " len: " << std::dec << ntohs(pevent->length)
@@ -612,6 +623,7 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 		<< " flag: " << ntohs(pevent->flag)
 		<< std::endl;
 
+	#if 0
 	std::cout << std::hex;
 	for (int i = 0 ; i < 128 ; i++) {
 		if ((i % 16) == 0) std::cout << std::endl;
@@ -620,8 +632,31 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 			<< static_cast<int>(ebdata[i]);
 	}
 	std::cout << std::dec << std::endl;
+	#endif
+	}
+	#endif
+
+	#if 0
+	if (g_ebs_depth < 1000) {
+	
+	unsigned char *sendbuf = new unsigned char[nsize];
+	memcpy(sendbuf, ebdata, nsize);
+	zmq::message_t message(
+		reinterpret_cast<void *>(sendbuf),
+		nsize,
+		ebs_buf_free,
+		NULL);
+	try {
+		ebserver.send(message);
+		g_ebs_depth++;
+	} catch (zmq::error_t &e) {
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		std::cerr << "#E DTeb send_data zmq err. " << e.what() << std::endl;
+		return -1;
 	}
 
+	}
+	#endif
 
 
 	static int lcount = 0;

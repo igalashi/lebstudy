@@ -20,7 +20,8 @@
 
 
 
-const int default_bufsize = 1024 * sizeof(unsigned int);
+//const int default_bufsize = 1024 * sizeof(unsigned int);
+const int default_bufsize = 1024 * 8;
 const int default_quelen = 10000;
 
 std::atomic<int> g_avant_depth(0);

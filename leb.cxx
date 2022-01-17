@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
 	}
 
 
-	zmq::context_t context(1);
+	zmq::context_t context(12);
 
 	std::vector<DAQTask*> tasks;
 	for (auto &i : nodes) {

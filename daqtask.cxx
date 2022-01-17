@@ -68,7 +68,10 @@ DAQTask::DAQTask(int id) : m_id(id), m_is_done(false)
 
 DAQTask::~DAQTask()
 {
-	std::cout << "DAQTask " << m_id << " destructed." << std::endl;
+	{
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		std::cout << "DAQTask " << m_id << " destructed." << std::endl;
+	}
 	return;
 }
 
@@ -110,7 +113,10 @@ void DAQTask::state_machine(void *context)
 		if (c_state == SM_END) break;
 	}
 
-	std::cout << "Task:" << m_id << " end." << std::endl;
+	{
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		std::cout << "Task:" << m_id << " end." << std::endl;
+	}
 
 	return;
 }
