@@ -3,6 +3,9 @@
  *
  */
 
+#ifndef INC_MSTOPWATCH
+#define INC_MSTOPWATCH
+
 #include <iostream>
 #include <cstdio>
 #include <unistd.h>
@@ -79,3 +82,4 @@ int main(int argc, char *argv[])
 }
 #endif
 
+#endif

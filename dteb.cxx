@@ -14,7 +14,7 @@
 #include "zmq.hpp"
 #include "koltcp.h"
 
-
+#include "packed_event.h"
 #include "daqtask.cxx"
 #include "mstopwatch.cxx"
 
@@ -481,6 +481,7 @@ int DTeb::write_data(unsigned char *cdata, int data_size)
 	return 0;
 }
 
+/*
 struct packed_event {
 	uint32_t magic;
 	uint16_t length;
@@ -488,6 +489,7 @@ struct packed_event {
 	uint16_t nodes;
 	uint16_t flag;
 };
+*/
 
 #define LEB_MAGIC 0xffffffff
 #define LEB_FLAG_COMPLETE  0x0001
@@ -529,7 +531,7 @@ int DTeb::pack_data(struct ebevent &event, char *cevent)
 	uint16_t fflag = event.is_fullev;
 	fflag = event.is_fullev
 		? fflag | LEB_FLAG_COMPLETE : fflag | LEB_FLAG_INCOMPLETE;
-	pevent->flag = htons(fflag);
+	pevent->flag = htonl(fflag);
 
 	return static_cast<int>(event.is_fullev);
 }
@@ -595,7 +597,7 @@ int DTeb::pack_data(struct ebevent &event, unsigned char * &pbuf)
 	uint16_t fflag = event.is_fullev;
 	fflag = event.is_fullev
 		? fflag | LEB_FLAG_COMPLETE : fflag | LEB_FLAG_INCOMPLETE;
-	pevent->flag = htons(fflag);
+	pevent->flag = htonl(fflag);
 
 	return buf.size();
 }
@@ -620,7 +622,7 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 		<< " len: " << std::dec << ntohs(pevent->length)
 		<< " id: " << ntohs(pevent->id)
 		<< " nodes: " << ntohs(pevent->nodes)
-		<< " flag: " << ntohs(pevent->flag)
+		<< " flag: " << ntohl(pevent->flag)
 		<< std::endl;
 
 	#if 0
@@ -636,7 +638,7 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 	}
 	#endif
 
-	#if 0
+	#if 1
 	if (g_ebs_depth < 1000) {
 	
 	unsigned char *sendbuf = new unsigned char[nsize];
