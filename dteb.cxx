@@ -34,7 +34,6 @@ const char *dtfilename(const char *name)
 
 const char* fnhead = "leb";
 
-
 unsigned long int get_time_ms()
 {
 	struct timeval now;
@@ -62,6 +61,8 @@ public:
 	DTeb(int i) : DAQTask(i), m_nspill(1) {};
 	int get_nspill() {return m_nspill;};
 	void set_nspill(int i) {m_nspill = i;};
+	int get_max_event_depth() {return m_max_event_depth;};
+	void set_max_event_depth(int i) {m_max_event_depth = i;};
 	virtual int init(std::vector<struct nodeprop> &);
 	void monitor();
 protected:
@@ -76,6 +77,7 @@ private:
 	int write_data(unsigned char *, int);
 	int pack_data(struct ebevent &, unsigned char * &);
 	int m_nspill;
+	unsigned int m_max_event_depth = 1024;
 	std::vector<unsigned int> m_nodes;
 	std::vector<struct ebevent> m_events;
 
@@ -205,7 +207,7 @@ int DTeb::st_running(void *context)
 	int nread_flagment = 0;
 
 	//std::vector<struct ebevent> ebevents;
-	std::vector<unsigned int> trigv(m_nodes.size());
+	//std::vector<unsigned int> trigv(m_nodes.size());
 
 	while (true) {
 		zmq::message_t message;
@@ -328,15 +330,21 @@ int DTeb::st_running(void *context)
 			} else {
 				m_events.push_back(ev);
 			}
+
+			// m_max_event_depth より長くなったら 先頭を送る。
+			if (m_events.size() > m_max_event_depth) {
+				send_data(*(m_events.begin()), ebserver);
+				m_events.erase(m_events.begin());
+			}
+
 		}
 
 
+		#if 0
 		auto it = std::find(m_nodes.begin(), m_nodes.end(), id);
 		int index = std::distance(m_nodes.begin(), it);
 		trigv[index] = trig;
 
-
-		#if 0
 		if ((nread_flagment % 100) == 0) {
 			std::cout << "\r\e[16C Evb: " << m_events.size();
 			for (unsigned int i = 0 ; i < m_nodes.size() ; i++) {
