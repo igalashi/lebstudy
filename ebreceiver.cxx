@@ -27,7 +27,7 @@ const char *dtfilename(const char *name)
 
 const char *fnhead = "leb";
 
-const char *g_ebsrv_endpoint = "tcp://localhost:5559";
+//const char *g_ebsrv_endpoint = "tcp://localhost:5559";
 std::ofstream g_ofs;
 
 bool g_flag_ofile = false;
@@ -127,8 +127,37 @@ int write_data(char *cdata, int data_size)
 	return 0;
 }
 
+int poll_socket(zmq::socket_t &socket)
+{
+	zmq::pollitem_t items[8];
+
+	items[0].socket = static_cast<void*>(socket);
+	items[0].fd = 0;
+	items[0].events = ZMQ_POLLIN;
+	items[0].revents = 0;
+	items[1].socket = nullptr;
+	items[1].fd = 0;
+	items[1].events = 0;
+	items[1].revents = 0;
+
+	//int rc = zmq::poll(items, 1, -1);
+	int rc = zmq::poll(items, 1, 0);
+
+	return rc;
+}
+
+
 int recv_data(zmq::socket_t &socket)
 {
+
+	#if 1
+	int rc;
+	while (!(rc = poll_socket(socket))) {
+		//std::cout << rc << std::flush;
+		usleep(1);
+	}
+	#endif
+
 	zmq::message_t message;
 	//socket.recv(&message, ZMQ_NOBLOCK);
 	socket.recv(&message);

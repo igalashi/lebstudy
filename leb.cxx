@@ -85,11 +85,12 @@ int main(int argc, char* argv[])
 		std::cout << "host: " << i.host
 			<< "  port: "  << i.port
 			<< "  addr: "  << i.address
-			<< "  data:";
+			<< "  data:" << std::hex;
 		for (auto &j : i.data) {
-			std::cout << " " << j;
+			std::cout << " " << std::setw(2) << std::setfill('0')
+				<< (static_cast<int>(j) & 0xff);
 		}
-		std::cout << std::endl;
+		std::cout << std::dec << std::endl;
 	}
 
 
@@ -134,6 +135,7 @@ int main(int argc, char* argv[])
 		//sleep(1);
 		while (true) {
 			std::string oneline;
+			std::cout << "> ";
 			std::cin >> oneline;
 			if (oneline == "run") eb->set_state(SM_RUNNING);
 			if (oneline == "idle") eb->set_state(SM_IDLE);
@@ -143,6 +145,7 @@ int main(int argc, char* argv[])
 			if (oneline == "end") break;;
 			if (oneline == "stop") break;;
 			if (oneline == "exit") break;;
+			if (oneline == "quit") break;;
 			if (oneline == "q") break;;
 		}
 		eb->set_state(SM_IDLE);
