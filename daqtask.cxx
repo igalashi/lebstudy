@@ -24,6 +24,7 @@ enum RunState {
 	SM_IDLE,
 	SM_RUNNING,
 	SM_END,
+	SM_EXIT,
 };
 
 
@@ -54,6 +55,7 @@ protected:
 	virtual int st_init(void *);
 	virtual int st_idle(void *);
 	virtual int st_running(void *);
+	virtual int st_end(void *);
 private:
 };
 static std::mutex g_dtmtx;
@@ -109,8 +111,12 @@ void DAQTask::state_machine(void *context)
 			case SM_RUNNING :
 				st_running(context);
 				break;
+
+			case SM_END :
+				st_end(context);
+				break;
 		}
-		if (c_state == SM_END) break;
+		if (c_state == SM_EXIT) break;
 	}
 
 	{
@@ -154,6 +160,19 @@ int DAQTask::st_running(void *context)
 	m_is_done = true;
 	return 0;
 }
+
+int DAQTask::st_end(void *context)
+{
+	{
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		std::cout << "Th." << m_id << " " << c_state << " end" << std::endl;
+	}
+	usleep(100000);
+
+	m_is_done = true;
+	return 0;
+}
+
 
 
 #ifdef TEST_MAIN

@@ -70,6 +70,7 @@ protected:
 	virtual int st_init(void *) override;
 	virtual int st_idle(void *) override;
 	virtual int st_running(void *) override;
+	virtual int st_end(void *) override;
 private:
 	//int scan_past(std::vector<struct ebevent> &, int);
 	int send_data(struct ebevent &, zmq::socket_t &);
@@ -388,6 +389,21 @@ int DTeb::st_running(void *context)
 	return 0;
 
 }
+
+int DTeb::st_end(void *context)
+{
+	#if 0
+	{
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		//std::cout << "eb(" << m_id << ") end" << std::endl;
+		std::cout << "." << std::flush;
+	}
+	#endif
+	usleep(100000);
+
+	return 0;
+}
+
 
 int DTeb::write_data(struct ebevent &event)
 {

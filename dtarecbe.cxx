@@ -54,6 +54,7 @@ protected:
 	virtual int st_init(void *) override;
 	virtual int st_idle(void *) override;
 	virtual int st_running(void *) override;
+	virtual int st_end(void *) override;
 private:
 	char *m_host;
 	int m_port;
@@ -229,3 +230,17 @@ int DTArecbe::st_running(void *context)
 
 	return 0;
 }
+
+int DTArecbe::st_end(void *context)
+{
+	#if 0
+	{
+		std::lock_guard<std::mutex> lock(*c_dtmtx);
+		std::cout << "avant(" << m_id << ") end" << std::endl;
+	}
+	#endif
+	usleep(100000);
+
+	return 0;
+}
+

@@ -19,6 +19,69 @@ const char* g_ebsrv_endpoint = "tcp://*:5559";
 #include "dteb.cxx"
 
 
+
+void print_state(int state)
+{
+	if (state == SM_INIT) std::cout << "INIT" << std::flush;
+	if (state == SM_IDLE) std::cout << "IDLE" << std::flush;
+	if (state == SM_RUNNING) std::cout << "RUNNING" << std::flush;
+	if (state == SM_END) std::cout << "END" << std::flush;
+
+	return;
+}
+
+bool init_sequence(DTeb *eb, std::vector<DAQTask *> &tasks)
+{
+	for (auto &i : tasks) i->clear_is_done();
+	for (auto &i : tasks) i->clear_is_good();
+	eb->set_state(SM_INIT);
+	bool is_good_init = true;
+	for (auto &i : tasks) {
+		for (int j = 0 ; j < 10 ; j++) {
+			if (i->is_done() == true) {
+				is_good_init = false;
+				std::cout << "#E " << i->get_id()
+					<< "initialize fail !" << std::endl;
+				break;
+			} else {
+				usleep(100);
+			}
+		}
+		if (is_good_init != true) break;
+	}
+	for (auto &i : tasks) if (i->is_good() != true) is_good_init = false;
+
+	return is_good_init;
+}
+
+int command_loop(DTeb *eb, std::vector<DAQTask *> &tasks)
+{
+	while (true) {
+		std::string oneline;
+		std::cout << "> ";
+		std::cin >> oneline;
+		if (oneline == "run") eb->set_state(SM_RUNNING);
+		if (oneline == "idle") eb->set_state(SM_IDLE);
+		if (oneline == "stop") eb->set_state(SM_IDLE);
+		if (oneline == "init") init_sequence(eb, tasks);
+		if (oneline == "end") eb->set_state(SM_END);
+
+		if ((oneline == "state")
+			|| (oneline == "status")
+			|| (oneline == "stat")) {
+			print_state(eb->get_state()) ;
+			std::cout << std::endl;
+		}
+		if (oneline == "mon") eb->monitor();
+
+		if (oneline == "exit") break;
+		if (oneline == "quit") break;
+		if (oneline == "q") break;
+	}
+
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 
@@ -132,6 +195,7 @@ int main(int argc, char* argv[])
 		eb->set_state(SM_IDLE);
 		usleep(100*1000);
 		eb->set_state(SM_RUNNING);
+		#if 0
 		//sleep(1);
 		while (true) {
 			std::string oneline;
@@ -151,10 +215,14 @@ int main(int argc, char* argv[])
 		eb->set_state(SM_IDLE);
 		usleep(100*1000);
 		eb->set_state(SM_END);
+		#endif
 
+		command_loop(eb, tasks);
+
+		eb->set_state(SM_EXIT);
 	} else {
 		std::cout << "Initialization fail!" << std::endl;
-		eb->set_state(SM_END);
+		eb->set_state(SM_EXIT);
 	}
 
 	for (auto &i : tasks) i->get_thread()->join();
