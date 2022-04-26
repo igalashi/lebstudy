@@ -20,6 +20,7 @@
 
 #if 0
 #include "dtfilename.cxx"
+#define WRITE_DATA_
 #else
 const char *dtfilename(const char *name)
 {
@@ -616,7 +617,7 @@ int DTeb::pack_data(struct ebevent &event, unsigned char * &pbuf)
 
 	pbuf = buf.data();
 	struct packed_event *pevent = reinterpret_cast<struct packed_event *>(pbuf);
-	pevent->length = htons(wcount);
+	pevent->length = htonl(wcount);
 	//pevent->nodes = htons(event.data.size());
 	uint16_t fflag = event.is_fullev;
 	fflag = event.is_fullev
@@ -664,23 +665,21 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 
 	#if 1
 	if (g_ebs_depth < 1000) {
-	
-	unsigned char *sendbuf = new unsigned char[nsize];
-	memcpy(sendbuf, ebdata, nsize);
-	zmq::message_t message(
-		reinterpret_cast<void *>(sendbuf),
-		nsize,
-		ebs_buf_free,
-		NULL);
-	try {
-		ebserver.send(message);
-		g_ebs_depth++;
-	} catch (zmq::error_t &e) {
-		std::lock_guard<std::mutex> lock(*c_dtmtx);
-		std::cerr << "#E DTeb send_data zmq err. " << e.what() << std::endl;
-		return -1;
-	}
-
+		unsigned char *sendbuf = new unsigned char[nsize];
+		memcpy(sendbuf, ebdata, nsize);
+		zmq::message_t message(
+			reinterpret_cast<void *>(sendbuf),
+			nsize,
+			ebs_buf_free,
+			NULL);
+		try {
+			ebserver.send(message);
+			g_ebs_depth++;
+		} catch (zmq::error_t &e) {
+			std::lock_guard<std::mutex> lock(*c_dtmtx);
+			std::cerr << "#E DTeb send_data zmq err. " << e.what() << std::endl;
+			return -1;
+		}
 	}
 	#endif
 
@@ -691,8 +690,10 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 	}
 	lcount++;
 
+	#ifdef WRITE_DATA_
 	//write_data(event);
 	write_data(ebdata, nsize);
+	#endif
 
 	return 0;
 }
