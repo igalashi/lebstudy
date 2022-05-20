@@ -5,13 +5,14 @@
 #include <iostream>
 #include <cstring>
 
-//const char* g_snd_endpoint = "tcp://localhost:5558";
-//const char* g_snd_endpoint = "ipc://./hello";
-const char* g_snd_endpoint = "inproc://hello";
-//const char* g_rec_endpoint = "tcp://*:5558";
-//const char* g_rec_endpoint = "ipc://./hello";
-const char* g_rec_endpoint = "inproc://hello";
-const char* g_ebsrv_endpoint = "tcp://*:5559";
+//const char *g_snd_endpoint = "tcp://localhost:5558";
+//const char *g_snd_endpoint = "ipc://./hello";
+const char *g_snd_endpoint = "inproc://hello";
+//const char *g_rec_endpoint = "tcp://*:5558";
+//const char *g_rec_endpoint = "ipc://./hello";
+const char *g_rec_endpoint = "inproc://hello";
+const char *g_ebsrv_endpoint = "tcp://*:5559";
+const char *g_com_endpoint = "tcp://*:5560";
 
 #include "nodelist.cxx"
 #include "daqtask.cxx"
@@ -81,6 +82,53 @@ int command_loop(DTeb *eb, std::vector<DAQTask *> &tasks)
 
 	return 0;
 }
+
+
+int remote_command_loop(DTeb *eb, std::vector<DAQTask *> &tasks, zmq::context_t &context)
+{
+	zmq::socket_t comport(context, ZMQ_PULL);
+	comport.bind(g_com_endpoint);
+
+	while (true) {
+		zmq::message_t message;
+		bool rc;
+		try {
+			rc = comport.recv(&message, ZMQ_NOBLOCK);
+		} catch (zmq::error_t &e) {
+			std::cerr << "#E leb command loop recv err." << e.what() << std::endl;
+			continue;
+		}
+		if (! rc) {
+			usleep(100);
+			continue;
+		}
+
+		std::string oneline(reinterpret_cast<char *>(message.data()));
+
+		if (oneline == "run") eb->set_state(SM_RUNNING);
+		if (oneline == "idle") eb->set_state(SM_IDLE);
+		if (oneline == "stop") eb->set_state(SM_IDLE);
+		if (oneline == "init") init_sequence(eb, tasks);
+		if (oneline == "end") eb->set_state(SM_END);
+
+		if ((oneline == "state")
+			|| (oneline == "status")
+			|| (oneline == "stat")) {
+			print_state(eb->get_state()) ;
+			std::cout << std::endl;
+		}
+		if (oneline == "mon") eb->monitor();
+
+		if (oneline == "exit") break;
+		if (oneline == "quit") break;
+		if (oneline == "q") break;
+		
+	}
+
+
+	return 0;
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -195,29 +243,9 @@ int main(int argc, char* argv[])
 		eb->set_state(SM_IDLE);
 		usleep(100*1000);
 		eb->set_state(SM_RUNNING);
-		#if 0
-		//sleep(1);
-		while (true) {
-			std::string oneline;
-			std::cout << "> ";
-			std::cin >> oneline;
-			if (oneline == "run") eb->set_state(SM_RUNNING);
-			if (oneline == "idle") eb->set_state(SM_IDLE);
 
-			if (oneline == "mon") eb->monitor();
-
-			if (oneline == "end") break;;
-			if (oneline == "stop") break;;
-			if (oneline == "exit") break;;
-			if (oneline == "quit") break;;
-			if (oneline == "q") break;;
-		}
-		eb->set_state(SM_IDLE);
-		usleep(100*1000);
-		eb->set_state(SM_END);
-		#endif
-
-		command_loop(eb, tasks);
+		//command_loop(eb, tasks);
+		remote_command_loop(eb, tasks, context);
 
 		eb->set_state(SM_EXIT);
 	} else {
