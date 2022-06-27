@@ -15,7 +15,7 @@ LIBS = -Lkol -lkol
 
 PROGS = kol/libkol.a drecbe checkrecbe daqtask dtmain \
 	leb nodelist triggen trigrecv ebreceiver checkleb \
-	lebcom contcheck
+	comtoleb contcheck
 
 all: $(PROGS)
 
@@ -73,7 +73,7 @@ checkleb: checkleb.cxx
 nodelist: nodelist.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -D TEST_MAIN -o $@ $< $(CXXLIBS) $(LIBS)
 
-lebcom: lebcom.cxx
+comtoleb: comtoleb.cxx
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $< $(CXXLIBS) $(LIBS)
 
 contcheck: contcheck.cxx
