@@ -18,6 +18,8 @@
 #include "daqtask.cxx"
 #include "mstopwatch.cxx"
 
+#include "disp_throughput.cxx"
+
 #if 0
 #include "dtfilename.cxx"
 #define WRITE_DATA_
@@ -684,11 +686,15 @@ int DTeb::send_data(struct ebevent &event, zmq::socket_t &ebserver)
 	#endif
 
 
+	#if 0
 	static int lcount = 0;
-	if ((lcount % 10) == 0) {
+	if ((lcount % 1000) == 0) {
 		std::cout << "\r Sent : " << lcount << "  " << std::flush;
 	}
 	lcount++;
+	#else
+	disp_throughput(ebdata, nsize);
+	#endif
 
 	#ifdef WRITE_DATA_
 	//write_data(event);

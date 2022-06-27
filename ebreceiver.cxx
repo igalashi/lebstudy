@@ -14,6 +14,7 @@
 #include "recbe.h"
 #include "packed_event.h"
 #include "mstopwatch.cxx"
+#include "disp_throughput.cxx"
 
 #if 1
 #include "dtfilename.cxx"
@@ -32,6 +33,7 @@ std::ofstream g_ofs;
 
 bool g_flag_ofile = false;
 bool g_flag_ifile = false;
+bool g_flag_checkdata = false;
 
 
 void hex_dump(char *data, int size)
@@ -58,9 +60,14 @@ int check_data(char *data, int size)
 	struct packed_event *ev
 		= reinterpret_cast<struct packed_event *>(data);
 
+	#if 0
+	hex_dump(data, size);
+	#endif
+
+	int dlen = ntohl(ev->length);
 	std::cout << "#EV Size: " << std::setw(5) << size
 		<< " Mag: "  << std::hex << ev->magic
-		<< " len: " << std::setw(5) << std::dec << ntohs(ev->length)
+		<< " len: " << std::setw(7) << std::dec << dlen
 		<< " id: "  << ntohs(ev->id)
 		<< " nodes: " << ntohs(ev->nodes)
 		<< " flag: " << ntohl(ev->flag)
@@ -71,6 +78,15 @@ int check_data(char *data, int size)
 	char *body = data + sizeof(struct packed_event);
 	//while (body < (data + size)) {
 	for (int i = 0 ; i < nnodes ; i++) {
+		//std::cout << "#D " << std::hex << reinterpret_cast<void *>(body)
+		//	<< " " << reinterpret_cast<void *>(data)
+		//	<< " " << std::dec << body - data << std::endl;
+		if ((body - data) >= dlen) {
+			std::cout << "#E Data was trancated. "
+				<< "Len: " << dlen << " Size: " << size << std::endl;
+			break;
+		}
+
 		struct recbe_header *hrecbe
 			= reinterpret_cast<struct recbe_header *>(body);
 		std::cout << "#RECBE " << std::setw(3) << nrecbe;
@@ -90,20 +106,62 @@ int check_data(char *data, int size)
 	return 0;
 }
 
-int write_data(char *cdata, int data_size)
+#if 0
+double mean_array(int *data, int ndata)
 {
-	static int wcount = 0;
+	long sum = 0;
+	long entry = 0;
+	for (int i = 0 ; i < ndata ; i++) {
+		sum += (i * data[i]);
+		entry += data[i];
+	}
+	double mean = static_cast<double>(sum) / static_cast<double>(entry);
+
+	return mean;
+}
+
+void disp_throughput(char *cdata, int data_size)
+{
+	static long int wcount = 0;
 	static mStopWatch sw;
 	static bool at_start = true;
+	static int stat_flag[2] = {0, 0};
+	static int stat_nodes[110];
+
+	struct packed_event *pheader;
+	pheader = reinterpret_cast<struct packed_event *>(cdata);
+
 
 	if (at_start) {
 		at_start = false;
 		sw.start();
+
+		for (int i = 0 ; i < 110 ; i++) stat_nodes[i] = 0;
 	}
 
-	g_ofs.write(cdata, data_size);
-	wcount += data_size;
 
+	unsigned int flag = ntohl(pheader->flag);
+	unsigned int nodes = ntohs(pheader->nodes);
+	if (flag == 1) {
+		stat_flag[1]++;
+	} else {
+		stat_flag[0]++;
+	}
+	stat_nodes[nodes]++;
+
+	#if 0
+	double flag_ratio = static_cast<double>(stat_flag[1]) /
+			static_cast<double>(stat_flag[0] + stat_flag[1]);
+	std::cout << "#D magic: 0x" << std::hex << ntohl(pheader->magic)
+		<< " len: " << std::dec << std::setw(8) << ntohl(pheader->length)
+		<< " id: " << std::setw(4) << ntohs(pheader->id)
+		<< " nodes: " << std::setw(3) << nodes
+		<< " flag: " << flag
+		<< " Su eff. : " << flag_ratio
+		<< std::endl;
+	#endif
+
+	wcount += data_size;
 	static unsigned int ebcount = 0;
 	if ((ebcount % 100) == 0) {
 		int elapse = sw.elapse();
@@ -114,18 +172,28 @@ int write_data(char *cdata, int data_size)
 				* 1000 / static_cast<double>(elapse);
 			double freq = ebcount * 1000 / static_cast<double>(elapse);
 
-			std::cout << "# Freq::" << freq << " Throughput: "
+			double flag_ratio = static_cast<double>(stat_flag[1]) /
+				static_cast<double>(stat_flag[0] + stat_flag[1]);
+			std::cout << "# Freq: " << freq << " Throughput: "
 			<< wcount << " B " << elapse << " ms "
-			<< wspeed << " MiB/s"  << std::endl;
+			<< wspeed << " MiB/s"
+			<< " Su Eff.: " << flag_ratio
+			<< " nodes: " << mean_array(stat_nodes, 105)
+			<< std::endl;
 
 			wcount = 0;
 			ebcount = 0;
+
+			stat_flag[0] = 0;
+			stat_flag[1] = 0;
+			for (int i = 0 ; i < 110 ; i++) stat_nodes[i] = 0;
 		}
 	}
 	ebcount++;
 
-	return 0;
+	return;
 }
+#endif
 
 int poll_socket(zmq::socket_t &socket)
 {
@@ -164,8 +232,6 @@ int recv_data(zmq::socket_t &socket)
 	char *buf = reinterpret_cast<char *>(message.data());
 	int nsize = message.size();
 
-	check_data(buf, nsize);
-
 	#if 0
 	if (nsize > 0) std::cout << "O";
 	else std::cout << "-";
@@ -173,12 +239,18 @@ int recv_data(zmq::socket_t &socket)
 	#endif
 
 	#if 0
-	if (nsize > 32) {
+	std::cout << "#Size: " << nsize << std::endl;
+	if (nsize < 32) {
+		hex_dump(buf, nsize);
+	} else {
 		hex_dump(buf, 64);
 	}
 	#endif
 	
-	if (g_flag_ofile) write_data(buf, nsize);
+	if (g_flag_checkdata) check_data(buf, nsize);
+	if (g_flag_ofile) g_ofs.write(buf, nsize);
+
+	disp_throughput(buf, nsize);
 
 	return nsize;
 }
@@ -255,6 +327,7 @@ int main(int argc, char *argv[])
 			g_flag_ifile = true;
 			g_flag_ofile = false;
 		}
+		if (sargv == "-c") g_flag_checkdata = true;
 
 	}
 

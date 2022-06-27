@@ -11,8 +11,11 @@ const char *g_snd_endpoint = "inproc://hello";
 //const char *g_rec_endpoint = "tcp://*:5558";
 //const char *g_rec_endpoint = "ipc://./hello";
 const char *g_rec_endpoint = "inproc://hello";
-const char *g_ebsrv_endpoint = "tcp://*:5559";
-const char *g_com_endpoint = "tcp://*:5560";
+
+const char *ebsrv_endpoint_default = "tcp://*:5559";
+const char *com_endpoint_default = "tcp://*:5560";
+char *g_ebsrv_endpoint;
+char *g_com_endpoint;
 
 #include "nodelist.cxx"
 #include "daqtask.cxx"
@@ -103,7 +106,12 @@ int remote_command_loop(DTeb *eb, std::vector<DAQTask *> &tasks, zmq::context_t 
 			continue;
 		}
 
-		std::string oneline(reinterpret_cast<char *>(message.data()));
+		//std::string oneline(reinterpret_cast<char *>(message.data()));
+		char word[message.size() + 1];
+		memcpy(word, reinterpret_cast<char *>(message.data()), message.size());
+		word[message.size()] = '\0';
+		std::string oneline(word);
+		std::cout << "#D " << message.size() << " " << oneline << std::endl;
 
 		if (oneline == "run") eb->set_state(SM_RUNNING);
 		if (oneline == "idle") eb->set_state(SM_IDLE);
@@ -125,6 +133,8 @@ int remote_command_loop(DTeb *eb, std::vector<DAQTask *> &tasks, zmq::context_t 
 		
 	}
 
+	std::cout << "#D out of the command loop" << std::endl;
+
 
 	return 0;
 }
@@ -134,8 +144,8 @@ int main(int argc, char* argv[])
 {
 
 	//int port = 24;
-	static char host[128];
-	strcpy(host, "192,168,10.56");
+	//static char host[128];
+	//strcpy(host, "192,168,10.56");
 	//bool is_dummy = false;
 	int buf_size = 0;
 	int nspill = 0;
@@ -144,21 +154,41 @@ int main(int argc, char* argv[])
 	char default_file[] = "nodes.txt";
 	char *nodefile = default_file;
 
+	std::string ebsrv_endpoint(ebsrv_endpoint_default);
+	std::string com_endpoint(com_endpoint_default);
+	g_ebsrv_endpoint = const_cast<char *>(ebsrv_endpoint.c_str());
+	g_com_endpoint = const_cast<char *>(com_endpoint.c_str());
+
 	for (int i = 1 ; i < argc ; i++) {
 		std::string sargv(argv[i]);
-		if ((sargv == "-h") && (argc > i)) {
-			strncpy(host, argv[i++], 128);
-		}
-		//if ((sargv == "-p")  && (argc > i)) {
-		//	port = strtol(argv[i++], NULL, 0);
+		//if ((sargv == "-h") && (argc > i)) {
+		//	strncpy(host, argv[i++], 128);
 		//}
-		if ((sargv == "-b")  && (argc > i)) {
+	
+		if ((sargv == "-p")  && (argc > i + 1)) {
+			int port = strtol(argv[++i], NULL, 0);
+			if (port > 0) {
+				std::string strport(argv[i]);
+				ebsrv_endpoint = "tcp://*:" + strport;
+				g_ebsrv_endpoint = const_cast<char *>(ebsrv_endpoint.c_str());
+			}
+		}
+		if ((sargv == "-c")  && (argc > i + 1)) {
+			int port = strtol(argv[++i], NULL, 0);
+			if (port > 0) {
+				std::string strport(argv[i]);
+				com_endpoint = "tcp://*:" + strport;
+				g_com_endpoint = const_cast<char *>(com_endpoint.c_str());
+			}
+		}
+		
+		if ((sargv == "-b")  && (argc > i + 1)) {
 			buf_size = strtol(argv[i++], NULL, 0);
 		}
-		if ((sargv == "-q")  && (argc > i)) {
+		if ((sargv == "-q")  && (argc > i + 1)) {
 			quelen = strtol(argv[i++], NULL, 0);
 		}
-		if ((sargv == "-n")  && (argc > i)) {
+		if ((sargv == "-n")  && (argc > i + 1)) {
 			nspill = strtol(argv[i++], NULL, 0);
 		}
 		//if (sargv == "--dummy") {
@@ -205,7 +235,7 @@ int main(int argc, char* argv[])
 	}
 
 
-	zmq::context_t context(12);
+	zmq::context_t context(120);
 
 	std::vector<DAQTask*> tasks;
 	for (auto &i : nodes) {
@@ -237,13 +267,17 @@ int main(int argc, char* argv[])
 	bool is_good_init = true;
 	for (auto &i : tasks) if (i->is_good() != true) is_good_init = false;
 
-
 	if (is_good_init) {
 
 		eb->set_state(SM_IDLE);
 		usleep(100*1000);
 		eb->set_state(SM_RUNNING);
 
+		{
+		usleep(500*1000);
+		std::cout << "#D data : " << g_ebsrv_endpoint  << std::endl;
+		std::cout << "#D com  : " << g_com_endpoint  << std::endl;
+		}
 		//command_loop(eb, tasks);
 		remote_command_loop(eb, tasks, context);
 

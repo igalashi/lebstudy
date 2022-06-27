@@ -133,8 +133,11 @@ int DTArecbe::st_running(void *context)
 	//sender.setsockopt(ZMQ_SNDHWM, 512*1024);
 	sender.setsockopt(ZMQ_SNDHWM, m_quelen);
 	#if 1
+	{
+	std::lock_guard<std::mutex> lock(*c_dtmtx);
 	std::cout << "avant: ZMQ_SNDBUF : " << sender.getsockopt<int>(ZMQ_SNDBUF) << std::endl;
 	std::cout << "avant: ZMQ_SNDHWM : " << sender.getsockopt<int>(ZMQ_SNDHWM) << std::endl;
+	}
 	#endif
 
 	sender.connect(g_snd_endpoint);

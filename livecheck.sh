@@ -2,6 +2,9 @@
 
 nodes=`seq 17 121`
 
+lives=''
+deads=''
+
 for i in $nodes
 do
 	#echo -n 192.168.10.$i
@@ -14,10 +17,14 @@ do
 		#fi
 		#echo -n '.'
 		echo -n -e '\r' $i '  '
+		lives=$lives' '$i		
 	else
 		echo -e '\r'
 		echo 'No responce 192.168.10.'$i :  $?
+		deads=$deads' '$i
 	fi
 done
 
 echo
+echo 'Lives: ' $lives
+echo 'Deads: ' $deads
